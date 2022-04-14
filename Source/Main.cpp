@@ -1,7 +1,13 @@
 #include <iostream>
 
+#include "Application.hpp"
+
 int main()
 {
-    std::cout << "Hello World" << std::endl;
+    {
+        Application app;
+        app.Run();
+    }
+
     return 0;
 }

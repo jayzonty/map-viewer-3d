@@ -14,10 +14,29 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Specify include directories
-include_directories(${Vulkan_INCLUDE_DIR} ${GLFW_INCLUDE_DIRS} Header)
+include_directories(
+    ${Vulkan_INCLUDE_DIR}
+    ${GLFW_INCLUDE_DIRS}
+    External/glm
+    Header
+)
 
 # Set SOURCES to contain all the source files
 set(SOURCES
+    # --- Core/Util ---
+    Source/Core/Util/FileUtils.cpp
+    # --- Core/Vulkan ---
+    Source/Core/Vulkan/VulkanGraphicsPipelineBuilder.cpp
+    Source/Core/Vulkan/VulkanBuffer.cpp
+    Source/Core/Vulkan/VulkanContext.cpp
+    Source/Core/Vulkan/VulkanImage.cpp
+    Source/Core/Vulkan/VulkanImageView.cpp
+    # --- Core ---
+    Source/Core/Window.cpp
+
+    Source/Application.cpp
+    Source/Input.cpp
+
     Source/Main.cpp
 )
 

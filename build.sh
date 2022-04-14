@@ -13,3 +13,8 @@ cp ./build/compile_commands.json ./compile_commands.json
 
 cd build
 make
+
+cd ..
+glslangValidator -S vert -e main -o Resources/Shaders/basic_vert.spv -V Resources/Shaders/basic_vert.glsl
+glslangValidator -S frag -e main -o Resources/Shaders/basic_frag.spv -V Resources/Shaders/basic_frag.glsl
+cp -r Resources build/Resources
