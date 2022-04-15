@@ -9,10 +9,28 @@
 #include "Core/Vulkan/VulkanImageView.hpp"
 
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_core.h>
 
 class Application
 {
 private:
+    /**
+     * Push constant
+     */
+    struct PushConstant
+    {
+        glm::mat4 projView;
+        uint32_t uboIndex;
+    };
+
+    /**
+     * Uniform buffer object
+     */
+    struct UniformBufferObject
+    {
+        glm::mat4 model;
+    };
+
     /**
      * Struct containing data needed for a frame
      */
@@ -56,6 +74,12 @@ private:
          * Fence signalled when the rendering for this frame is done
          */
         VkFence renderDoneFence;
+
+        // --- Descriptor sets ---
+
+        VkDescriptorSet descriptorSet;
+
+        VulkanBuffer uniformBuffer;
     };
 
 private:
@@ -129,6 +153,9 @@ private:
      */
     VulkanImageView m_vkDepthBufferImageView;
 
+    VkDescriptorSetLayout m_vkDescriptorSetLayout;
+    VkDescriptorPool m_vkDescriptorPool;
+
 public:
     /**
      * @brief Constructor
@@ -193,6 +220,8 @@ private:
      * @return Returns true if the initialization was successful. Returns false otherwise.
      */
     bool InitCommandBuffers();
+
+    bool InitDescriptors();
 
     /**
      * @brief Create Vulkan graphics pipeline

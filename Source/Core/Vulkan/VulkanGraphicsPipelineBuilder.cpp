@@ -230,6 +230,13 @@ VulkanGraphicsPipelineBuilder& VulkanGraphicsPipelineBuilder::SetDescriptorSetLa
     return *this;
 }
 
+VulkanGraphicsPipelineBuilder& VulkanGraphicsPipelineBuilder::SetPushConstantRanges(const std::vector<VkPushConstantRange> &ranges)
+{
+    m_pipelineLayoutCreateInfo.pushConstantRangeCount = static_cast<uint32_t>(ranges.size());
+    m_pipelineLayoutCreateInfo.pPushConstantRanges = ranges.data();
+    return *this;
+}
+
 VulkanGraphicsPipelineBuilder& VulkanGraphicsPipelineBuilder::SetVertexShaderFilePath(const std::string &filePath)
 {
     m_vertexShaderFilePath = filePath;

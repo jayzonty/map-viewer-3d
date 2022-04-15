@@ -5,8 +5,10 @@
 #include "Vertex.hpp"
 #include "Core/Vulkan/VulkanGraphicsPipelineBuilder.hpp"
 #include "Core/Vulkan/VulkanContext.hpp"
+#include "glm/ext/matrix_transform.hpp"
 
 #include <GLFW/glfw3.h>
+#include <glm/gtc/matrix_transform.hpp>
 #include <vulkan/vulkan_core.h>
 
 #include <array>
@@ -49,17 +51,17 @@ void Application::Run()
     }
 
     std::array<Vertex, 6> vertices;
-    vertices[0].position = { -0.5f,  0.5f,  0.0f };
+    vertices[0].position = { -0.5f, -0.5f,  0.0f };
     vertices[0].color = { 0.0f, 1.0f, 0.0f };
-    vertices[1].position = {  0.5f,  0.5f,  0.0f };
+    vertices[1].position = {  0.5f, -0.5f,  0.0f };
     vertices[1].color = { 0.0f, 1.0f, 0.0f };
-    vertices[2].position = {  0.0f,  -0.5f, 0.0f };
+    vertices[2].position = {  0.0f,  0.5f, 0.0f };
     vertices[2].color = { 0.0f, 1.0f, 0.0f };
-    vertices[3].position = {  0.0f,  0.5f,  1.0f };
+    vertices[3].position = { -0.5f, -0.5f,  0.0f };
     vertices[3].color = { 0.0f, 0.0f, 1.0f };
-    vertices[4].position = {  1.0f,  0.5f,  1.0f };
+    vertices[4].position = {  0.5f, -0.5f,  0.0f };
     vertices[4].color = { 0.0f, 0.0f, 1.0f };
-    vertices[5].position = {  0.5f, -0.5f,  1.0f };
+    vertices[5].position = {  0.0f,  0.5f,  0.0f };
     vertices[5].color = { 0.0f, 0.0f, 1.0f };
 
     if (!m_testVertexBuffer.Create(sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
@@ -71,6 +73,13 @@ void Application::Run()
     m_testVertexBuffer.UnmapMemory();
 
     double prevTime = glfwGetTime();
+
+    glm::mat4 yCorrection(1.0f);
+    yCorrection[1][1] = -1.0f;
+    glm::mat4 proj = glm::perspective(glm::radians(45.0f), m_window.GetWidth() * 1.0f / m_window.GetHeight(), 0.1f, 100.0f);
+    glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 2.0f, 3.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 projView = yCorrection * proj * view;
+    projView = yCorrection * glm::mat4(1.0f);
 
     uint32_t currentFrame = 0;
 
@@ -165,7 +174,27 @@ void Application::Run()
         VkBuffer vertexBuffers[] = { m_testVertexBuffer.GetHandle() };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, &offset);
 
+        // Update UBO
+        glm::mat4 model(1.0f);
+
+        UniformBufferObject *ubo = reinterpret_cast<UniformBufferObject*>(m_frameDataList[currentFrame].uniformBuffer.MapMemory(0, sizeof(UniformBufferObject) * 2));
+        model = glm::translate(model, glm::vec3(-0.25f, 0.0f, 0.5f));
+        ubo[0].model = model;
+        model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(0.25f, 0.0f, 0.0f));
+        ubo[1].model = model;
+        m_frameDataList[currentFrame].uniformBuffer.UnmapMemory();
+
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipelineLayout, 0, 1, &m_frameDataList[currentFrame].descriptorSet, 0, nullptr);
+
+        // Push constants
+        PushConstant pushConstant;
+        pushConstant.projView = projView;
+        pushConstant.uboIndex = 0;
+        vkCmdPushConstants(commandBuffer, m_vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pushConstant);
         vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        pushConstant.uboIndex = 1;
+        vkCmdPushConstants(commandBuffer, m_vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pushConstant);
         vkCmdDraw(commandBuffer, 3, 1, 3, 0);
 
         vkCmdEndRenderPass(commandBuffer);
@@ -294,6 +323,10 @@ bool Application::Init()
     {
         std::cerr << "[Application] Failed to initialize Vulkan command buffers!" << std::endl;
     }
+    if (!InitDescriptors())
+    {
+        std::cerr << "[Application] Failed to initialize descriptor sets!" << std::endl;
+    }
     if (!InitGraphicsPipeline())
     {
         std::cerr << "[Application] Failed to initialize graphics pipeline!" << std::endl;
@@ -346,6 +379,16 @@ void Application::Cleanup()
     m_vkPipeline = VK_NULL_HANDLE;
     vkDestroyPipelineLayout(VulkanContext::GetLogicalDevice(), m_vkPipelineLayout, nullptr);
     m_vkPipelineLayout = VK_NULL_HANDLE;
+
+    for (size_t i = 0; i < m_frameDataList.size(); i++)
+    {
+        m_frameDataList[i].uniformBuffer.Cleanup();
+    }
+
+    vkDestroyDescriptorPool(VulkanContext::GetLogicalDevice(), m_vkDescriptorPool, nullptr);
+
+    vkDestroyDescriptorSetLayout(VulkanContext::GetLogicalDevice(), m_vkDescriptorSetLayout, nullptr);
+    m_vkDescriptorSetLayout = VK_NULL_HANDLE;
 
     m_vkDepthBufferImageView.Cleanup();
     m_vkDepthBufferImage.Cleanup();
@@ -724,6 +767,89 @@ bool Application::InitCommandBuffers()
     return true;
 }
 
+bool Application::InitDescriptors()
+{
+    VkDescriptorSetLayoutBinding uboLayoutBinding = {};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &uboLayoutBinding;
+
+    if (vkCreateDescriptorSetLayout(VulkanContext::GetLogicalDevice(), &layoutInfo, nullptr, &m_vkDescriptorSetLayout) != VK_SUCCESS)
+    {
+        std::cerr << "[Application] Failed to create descriptor layout for the UBO!" << std::endl;
+        return false;
+    }
+
+    VkDeviceSize bufferSize = sizeof(UniformBufferObject) * 2;
+    for (size_t i = 0; i < m_frameDataList.size(); i++)
+    {
+        if (!m_frameDataList[i].uniformBuffer.Create(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
+        {
+            std::cerr << "[Application] Failed to create uniform buffer!" << std::endl;
+            return false;
+        }
+    }
+
+    VkDescriptorPoolSize poolSize = {};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = m_maxFramesInFlight;
+
+    VkDescriptorPoolCreateInfo poolInfo = {};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.maxSets = m_maxFramesInFlight;
+
+    if (vkCreateDescriptorPool(VulkanContext::GetLogicalDevice(), &poolInfo, nullptr, &m_vkDescriptorPool) != VK_SUCCESS)
+    {
+        std::cerr << "[Application] Failed to create descriptor pool!" << std::endl;
+        return false;
+    }
+
+    std::vector<VkDescriptorSetLayout> layouts(m_maxFramesInFlight, m_vkDescriptorSetLayout);
+    VkDescriptorSetAllocateInfo descriptorsAllocInfo = {};
+    descriptorsAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    descriptorsAllocInfo.descriptorPool = m_vkDescriptorPool;
+    descriptorsAllocInfo.descriptorSetCount = m_maxFramesInFlight;
+    descriptorsAllocInfo.pSetLayouts = layouts.data();
+
+    std::vector<VkDescriptorSet> descriptorSets(m_maxFramesInFlight);
+    if (vkAllocateDescriptorSets(VulkanContext::GetLogicalDevice(), &descriptorsAllocInfo, descriptorSets.data()) != VK_SUCCESS)
+    {
+        std::cerr << "[Application] Failed to allocate descriptor sets!" << std::endl;
+        return false;
+    }
+
+    for (size_t i = 0; i < m_frameDataList.size(); i++)
+    {
+        m_frameDataList[i].descriptorSet = descriptorSets[i];
+
+        VkDescriptorBufferInfo bufferInfo = {};
+        bufferInfo.buffer = m_frameDataList[i].uniformBuffer.GetHandle();
+        bufferInfo.offset = 0;
+        bufferInfo.range = sizeof(UniformBufferObject); // or VK_WHOLE_SIZE
+
+        VkWriteDescriptorSet descriptorWrite = {};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = m_frameDataList[i].descriptorSet;
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo = &bufferInfo;
+
+        vkUpdateDescriptorSets(VulkanContext::GetLogicalDevice(), 1, &descriptorWrite, 0, nullptr);
+    }
+
+    return true;
+}
+
 /**
  * @brief Create Vulkan graphics pipeline
  * @return Returns true if the creation was successful. Returns false otherwise.
@@ -769,7 +895,15 @@ bool Application::InitGraphicsPipeline()
     builder.SetDynamicStates(dynamicStates);
 
     // --- Pipeline layout ---
-    //std::array<VkDescriptorSetLayout, 4> descriptorSetLayouts = { m_vkPerFrameDescriptorSetLayout, m_vkPerObjectDescriptorSetLayout, m_vkSingleTextureDescriptorSetLayout, m_vkSingleTextureDescriptorSetLayout };
+    std::vector<VkPushConstantRange> pushConstantRanges;
+    pushConstantRanges.emplace_back();
+    pushConstantRanges.back().offset = 0;
+    pushConstantRanges.back().size = static_cast<uint32_t>(sizeof(PushConstant));
+    pushConstantRanges.back().stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    builder.SetPushConstantRanges(pushConstantRanges);
+
+    std::vector<VkDescriptorSetLayout> descriptorSetLayouts = { m_vkDescriptorSetLayout };
+    builder.SetDescriptorSetLayouts(descriptorSetLayouts);
     
     // --- Shaders ---
     builder

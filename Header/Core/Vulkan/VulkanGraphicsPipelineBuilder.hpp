@@ -71,6 +71,7 @@ public:
 
     // --- Pipeline layout ---
     VulkanGraphicsPipelineBuilder& SetDescriptorSetLayouts(const std::vector<VkDescriptorSetLayout> &layouts);
+    VulkanGraphicsPipelineBuilder& SetPushConstantRanges(const std::vector<VkPushConstantRange> &ranges);
 
     // --- Shaders ---
     VulkanGraphicsPipelineBuilder& SetVertexShaderFilePath(const std::string &vertexShaderFilePath);
