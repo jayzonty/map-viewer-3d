@@ -1,11 +1,14 @@
 #include "Application.hpp"
 
+#include "Core/Camera.hpp"
 #include "Core/Input.hpp"
 #include "Core/Util/FileUtils.hpp"
 #include "Vertex.hpp"
 #include "Core/Vulkan/VulkanGraphicsPipelineBuilder.hpp"
 #include "Core/Vulkan/VulkanContext.hpp"
 #include "glm/ext/matrix_transform.hpp"
+#include "glm/fwd.hpp"
+#include "glm/geometric.hpp"
 
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -21,6 +24,7 @@
  */
 Application::Application()
     : m_isRunning(false)
+    , m_camera()
 {
 }
 
@@ -74,9 +78,10 @@ void Application::Run()
 
     double prevTime = glfwGetTime();
 
-    glm::mat4 proj = glm::perspective(glm::radians(45.0f), m_window.GetWidth() * 1.0f / m_window.GetHeight(), 0.1f, 100.0f);
-    glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 2.0f, 3.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 projView = proj * view;
+    m_camera.SetFieldOfView(45.0f);
+    m_camera.SetAspectRatio(m_window.GetWidth() * 1.0f / m_window.GetHeight());
+    m_camera.SetPosition(glm::vec3(0.0f, 2.0f, 3.0f));
+    m_camera.SetWorldUpVector(glm::vec3(0.0f, 1.0f, 0.0f));
 
     uint32_t currentFrame = 0;
 
@@ -86,6 +91,38 @@ void Application::Run()
         double currentTime = glfwGetTime();
         float deltaTime = static_cast<float>(currentTime - prevTime);
         prevTime = currentTime;
+
+        // --- Camera input ---
+        glm::vec3 cameraMovement(0.0f);
+        if (Input::IsKeyDown(Input::Key::W))
+        {
+            cameraMovement.z =  1.0f;
+        }
+        if (Input::IsKeyDown(Input::Key::S))
+        {
+            cameraMovement.z =  -1.0f;
+        }
+        if (Input::IsKeyDown(Input::Key::A))
+        {
+            cameraMovement.x = -1.0f;
+        }
+        if (Input::IsKeyDown(Input::Key::D))
+        {
+            cameraMovement.x =  1.0f;
+        }
+        if (glm::dot(cameraMovement, cameraMovement) > 0.0f)
+        {
+            cameraMovement = glm::normalize(cameraMovement);
+        }
+        cameraMovement *= 5.0f * deltaTime;
+
+        m_camera.SetYaw(m_camera.GetYaw() + Input::GetMouseDeltaX() * 0.25f);
+        m_camera.SetPitch(m_camera.GetPitch() + Input::GetMouseDeltaY() * 0.25f);
+
+        m_camera.SetPosition
+        (
+            m_camera.GetPosition() + cameraMovement.x * m_camera.GetRightVector() + cameraMovement.z * m_camera.GetForwardVector()
+        );
 
         // --- Draw frame start ---
 
@@ -144,7 +181,7 @@ void Application::Run()
         renderPassBeginInfo.renderArea.offset = { 0, 0 };
         renderPassBeginInfo.renderArea.extent = m_vkSwapchainImageExtent;
         std::array<VkClearValue, 2> clearValues;
-        clearValues[0].color = { 1.0f, 0.0f, 0.0f, 1.0f };
+        clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
         clearValues[1].depthStencil = { 1.0f, 0 };
         renderPassBeginInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
         renderPassBeginInfo.pClearValues = clearValues.data();
@@ -185,6 +222,7 @@ void Application::Run()
 
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipelineLayout, 0, 1, &m_frameDataList[currentFrame].descriptorSet, 0, nullptr);
 
+        glm::mat4 projView = m_camera.GetProjectionMatrix() * m_camera.GetViewMatrix();
         // Push constants
         PushConstant pushConstant;
         pushConstant.projView = projView;
@@ -339,7 +377,7 @@ bool Application::Init()
 
     // Disable the cursor.
     // TODO: Maybe have a function inside the window class for this
-    //glfwSetInputMode(windowHandle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetInputMode(windowHandle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	// Set the callback function for when a key was pressed
 	glfwSetKeyCallback(windowHandle, Input::KeyCallback);

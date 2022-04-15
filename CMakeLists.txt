@@ -32,6 +32,7 @@ set(SOURCES
     Source/Core/Vulkan/VulkanImage.cpp
     Source/Core/Vulkan/VulkanImageView.cpp
     # --- Core ---
+    Source/Core/Camera.cpp
     Source/Core/Window.cpp
 
     Source/Application.cpp

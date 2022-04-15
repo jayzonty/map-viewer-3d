@@ -1,6 +1,7 @@
 #ifndef APPLICATION_HEADER
 #define APPLICATION_HEADER
 
+#include "Core/Camera.hpp"
 #include "Core/Window.hpp"
 #include "Vertex.hpp"
 
@@ -155,6 +156,11 @@ private:
 
     VkDescriptorSetLayout m_vkDescriptorSetLayout;
     VkDescriptorPool m_vkDescriptorPool;
+
+    /**
+     * Camera
+     */
+    Camera m_camera;
 
 public:
     /**
