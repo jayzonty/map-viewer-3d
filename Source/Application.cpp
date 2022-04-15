@@ -74,12 +74,9 @@ void Application::Run()
 
     double prevTime = glfwGetTime();
 
-    glm::mat4 yCorrection(1.0f);
-    yCorrection[1][1] = -1.0f;
     glm::mat4 proj = glm::perspective(glm::radians(45.0f), m_window.GetWidth() * 1.0f / m_window.GetHeight(), 0.1f, 100.0f);
     glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 2.0f, 3.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 projView = yCorrection * proj * view;
-    projView = yCorrection * glm::mat4(1.0f);
+    glm::mat4 projView = proj * view;
 
     uint32_t currentFrame = 0;
 
@@ -154,11 +151,12 @@ void Application::Run()
         vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         // Viewport and scissors are dynamic, so we set here as a command
+        float viewportHeight = static_cast<float>(m_vkSwapchainImageExtent.height);
         VkViewport viewport {};
         viewport.x = 0.0f;
-        viewport.y = 0.0f;
+        viewport.y = viewportHeight;
         viewport.width = static_cast<float>(m_vkSwapchainImageExtent.width);
-        viewport.height = static_cast<float>(m_vkSwapchainImageExtent.height);
+        viewport.height = -viewportHeight; // Supported from Vulkan 1.1 to switch from Y=down convention
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);

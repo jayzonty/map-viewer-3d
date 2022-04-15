@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <set>
+#include <vulkan/vulkan_core.h>
 
 /**
  * @brief Destructor
@@ -144,7 +145,7 @@ bool VulkanContext::InitInternal(GLFWwindow* window)
     applicationInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     applicationInfo.pEngineName = "No Engine";
     applicationInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    applicationInfo.apiVersion = VK_API_VERSION_1_0;
+    applicationInfo.apiVersion = VK_API_VERSION_1_1;
 
     VkInstanceCreateInfo instanceCreateInfo = {};
     instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
