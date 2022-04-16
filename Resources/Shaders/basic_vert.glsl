@@ -20,13 +20,13 @@ struct UniformBufferObject
 
 layout (set = 0, binding = 0) uniform UniformBufferObjects
 {
-    UniformBufferObject buffers[2];
+    UniformBufferObject buffers[1000];
 } uboArray;
 
 void main()
 {
-    gl_Position = pushConstants.projView * uboArray.buffers[pushConstants.uboIndex].model * vec4(position, 1.0);
-    //gl_Position = pushConstants.projView * vec4(position, 1.0);
+    //gl_Position = pushConstants.projView * uboArray.buffers[pushConstants.uboIndex].model * vec4(position, 1.0);
+    gl_Position = pushConstants.projView * vec4(position, 1.0);
 
     fragColor = color;
     //fragUV = uv;

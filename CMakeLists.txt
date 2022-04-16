@@ -18,11 +18,14 @@ include_directories(
     ${Vulkan_INCLUDE_DIR}
     ${GLFW_INCLUDE_DIRS}
     External/glm
+    External/tinyxml
     Header
 )
 
 # Set SOURCES to contain all the source files
 set(SOURCES
+    # --- TinyXML (External) ---
+    External/tinyxml/tinyxml2.cpp
     # --- Core/Util ---
     Source/Core/Util/FileUtils.cpp
     # --- Core/Vulkan ---
@@ -34,7 +37,11 @@ set(SOURCES
     # --- Core ---
     Source/Core/Camera.cpp
     Source/Core/Window.cpp
-
+    # --- Map ---
+    Source/Map/MapData.cpp
+    # --- Util ---
+    Source/Util/GeometryUtils.cpp
+    # --- Base ---
     Source/Application.cpp
     Source/Input.cpp
 

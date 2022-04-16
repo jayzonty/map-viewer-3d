@@ -3,6 +3,9 @@
 #include "Core/Camera.hpp"
 #include "Core/Input.hpp"
 #include "Core/Util/FileUtils.hpp"
+#include "Map/BuildingData.hpp"
+#include "Map/MapData.hpp"
+#include "Util/GeometryUtils.hpp"
 #include "Vertex.hpp"
 #include "Core/Vulkan/VulkanGraphicsPipelineBuilder.hpp"
 #include "Core/Vulkan/VulkanContext.hpp"
@@ -54,19 +57,68 @@ void Application::Run()
         return;
     }
 
-    std::array<Vertex, 6> vertices;
-    vertices[0].position = { -0.5f, -0.5f,  0.0f };
-    vertices[0].color = { 0.0f, 1.0f, 0.0f };
-    vertices[1].position = {  0.5f, -0.5f,  0.0f };
-    vertices[1].color = { 0.0f, 1.0f, 0.0f };
-    vertices[2].position = {  0.0f,  0.5f, 0.0f };
-    vertices[2].color = { 0.0f, 1.0f, 0.0f };
-    vertices[3].position = { -0.5f, -0.5f,  0.0f };
-    vertices[3].color = { 0.0f, 0.0f, 1.0f };
-    vertices[4].position = {  0.5f, -0.5f,  0.0f };
-    vertices[4].color = { 0.0f, 0.0f, 1.0f };
-    vertices[5].position = {  0.0f,  0.5f,  0.0f };
-    vertices[5].color = { 0.0f, 0.0f, 1.0f };
+    MapData map;
+    map.Parse("Resources/map.osm"); // TODO: Stream data, or have a way to select map data file
+    const std::vector<BuildingData>* buildings = map.GetBuildings();
+
+    glm::vec3 sideColor(0.65f);
+    glm::vec3 topColor(0.9f);
+    glm::vec3 bottomColor(0.35f);
+
+    std::vector<glm::vec2> pointsInTriangulation;
+
+    std::vector<Vertex> vertices;
+    for (size_t i = 0; i < buildings->size(); i++)
+    {
+        float buildingHeight = buildings->at(i).heightInMeters;
+        float buildingYOffset = buildings->at(i).heightFromGround;
+
+        // Top
+        GeometryUtils::PolygonTriangulation(buildings->at(i).outline, pointsInTriangulation);
+        for (size_t j = 0; j < pointsInTriangulation.size(); j++)
+        {
+            vertices.emplace_back();
+            vertices.back().position.x = buildings->at(i).position.x + pointsInTriangulation[j].x;
+            vertices.back().position.y = buildingYOffset + buildingHeight;
+            vertices.back().position.z = buildings->at(i).position.y + pointsInTriangulation[j].y;
+            vertices.back().color = topColor;
+        }
+        // Bottom
+        for (size_t j = pointsInTriangulation.size(); j > 0; j--)
+        {
+            vertices.emplace_back();
+            vertices.back().position.x = buildings->at(i).position.x + pointsInTriangulation[j - 1].x;
+            vertices.back().position.y = buildingYOffset;
+            vertices.back().position.z = buildings->at(i).position.y + pointsInTriangulation[j - 1].y;
+            vertices.back().color = bottomColor;
+        }
+
+        // Extrude
+        for (size_t j = 0; j < buildings->at(i).outline.size(); j++)
+        {
+            const glm::vec2 &p0 = buildings->at(i).position + buildings->at(i).outline[j];
+            const glm::vec2 &p1 = buildings->at(i).position + buildings->at(i).outline[(j + 1) % buildings->at(i).outline.size()];
+
+            vertices.emplace_back();
+            vertices.back().position = { p0.x, buildingYOffset, p0.y };
+            vertices.back().color = sideColor;
+            vertices.emplace_back();
+            vertices.back().position = { p1.x, buildingYOffset, p1.y };
+            vertices.back().color = sideColor;
+            vertices.emplace_back();
+            vertices.back().position = { p1.x, buildingYOffset + buildingHeight, p1.y };
+            vertices.back().color = sideColor;
+            vertices.emplace_back();
+            vertices.back().position = { p1.x, buildingYOffset + buildingHeight, p1.y };
+            vertices.back().color = sideColor;
+            vertices.emplace_back();
+            vertices.back().position = { p0.x, buildingYOffset + buildingHeight, p0.y };
+            vertices.back().color = sideColor;
+            vertices.emplace_back();
+            vertices.back().position = { p0.x, buildingYOffset, p0.y };
+            vertices.back().color = sideColor;
+        }
+    }
 
     if (!m_testVertexBuffer.Create(sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
     {
@@ -78,7 +130,7 @@ void Application::Run()
 
     double prevTime = glfwGetTime();
 
-    m_camera.SetFieldOfView(45.0f);
+    m_camera.SetFieldOfView(60.0f);
     m_camera.SetAspectRatio(m_window.GetWidth() * 1.0f / m_window.GetHeight());
     m_camera.SetPosition(glm::vec3(0.0f, 2.0f, 3.0f));
     m_camera.SetWorldUpVector(glm::vec3(0.0f, 1.0f, 0.0f));
@@ -96,11 +148,11 @@ void Application::Run()
         glm::vec3 cameraMovement(0.0f);
         if (Input::IsKeyDown(Input::Key::W))
         {
-            cameraMovement.z =  1.0f;
+            cameraMovement.z =  -1.0f;
         }
         if (Input::IsKeyDown(Input::Key::S))
         {
-            cameraMovement.z =  -1.0f;
+            cameraMovement.z =  1.0f;
         }
         if (Input::IsKeyDown(Input::Key::A))
         {
@@ -116,8 +168,11 @@ void Application::Run()
         }
         cameraMovement *= 5.0f * deltaTime;
 
-        m_camera.SetYaw(m_camera.GetYaw() + Input::GetMouseDeltaX() * 0.25f);
-        m_camera.SetPitch(m_camera.GetPitch() + Input::GetMouseDeltaY() * 0.25f);
+        float yaw = m_camera.GetYaw() - Input::GetMouseDeltaX() * 0.25f;
+        float pitch = m_camera.GetPitch() + Input::GetMouseDeltaY() * 0.25f;
+        pitch = glm::clamp(pitch, -89.0f, 89.0f);
+        m_camera.SetYaw(yaw);
+        m_camera.SetPitch(pitch);
 
         m_camera.SetPosition
         (
@@ -210,28 +265,22 @@ void Application::Run()
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, &offset);
 
         // Update UBO
-        glm::mat4 model(1.0f);
+        /*glm::mat4 model(1.0f);
+        UniformBufferObject *ubo = reinterpret_cast<UniformBufferObject*>(m_frameDataList[currentFrame].uniformBuffer.MapMemory(0, sizeof(UniformBufferObject) * 1000));
+        for (size_t i = 0; i < 1000; i++)
+        {
+            ubo[i].model = model;
+        }
+        m_frameDataList[currentFrame].uniformBuffer.UnmapMemory();*/
 
-        UniformBufferObject *ubo = reinterpret_cast<UniformBufferObject*>(m_frameDataList[currentFrame].uniformBuffer.MapMemory(0, sizeof(UniformBufferObject) * 2));
-        model = glm::translate(model, glm::vec3(-0.25f, 0.0f, 0.5f));
-        ubo[0].model = model;
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(0.25f, 0.0f, 0.0f));
-        ubo[1].model = model;
-        m_frameDataList[currentFrame].uniformBuffer.UnmapMemory();
-
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipelineLayout, 0, 1, &m_frameDataList[currentFrame].descriptorSet, 0, nullptr);
+        //vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipelineLayout, 0, 1, &m_frameDataList[currentFrame].descriptorSet, 0, nullptr);
 
         glm::mat4 projView = m_camera.GetProjectionMatrix() * m_camera.GetViewMatrix();
         // Push constants
         PushConstant pushConstant;
         pushConstant.projView = projView;
-        pushConstant.uboIndex = 0;
         vkCmdPushConstants(commandBuffer, m_vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pushConstant);
-        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-        pushConstant.uboIndex = 1;
-        vkCmdPushConstants(commandBuffer, m_vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pushConstant);
-        vkCmdDraw(commandBuffer, 3, 1, 3, 0);
+        vkCmdDraw(commandBuffer, vertices.size(), 1, 0, 0);
 
         vkCmdEndRenderPass(commandBuffer);
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
