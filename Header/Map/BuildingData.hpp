@@ -7,10 +7,10 @@
 
 struct BuildingData
 {
-    glm::vec2 position;
+    glm::dvec2 position;
     double heightInMeters = 6.0;
     double heightFromGround = 0.0;
-    std::vector<glm::vec2> outline;
+    std::vector<glm::dvec2> outline;
 };
 
 #endif // BUILDING_DATA_HEADER

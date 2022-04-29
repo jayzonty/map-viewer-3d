@@ -8,11 +8,11 @@
 
 namespace GeometryUtils
 {
-extern bool IsCollinear(const glm::vec2 &a, const glm::vec2 &b, const glm::vec2 &c);
-extern bool IsCCW(const glm::vec2 &a, const glm::vec2 &b, const glm::vec2 &c);
-extern bool IsPointInsideTriangle(const glm::vec2& point, const glm::vec2& a, const glm::vec2& b, const glm::vec2& c);
-extern bool IsPolygonCCW(const std::vector<glm::vec2> &polygonPoints);
-extern void PolygonTriangulation(const std::vector<glm::vec2> &polygonPoints, std::vector<glm::vec2> &outPoints);
+extern bool IsCollinear(const glm::dvec2 &a, const glm::dvec2 &b, const glm::dvec2 &c);
+extern bool IsCCW(const glm::dvec2 &a, const glm::dvec2 &b, const glm::dvec2 &c);
+extern bool IsPointInsideTriangle(const glm::dvec2& point, const glm::dvec2& a, const glm::dvec2& b, const glm::dvec2& c);
+extern bool IsPolygonCCW(const std::vector<glm::dvec2> &polygonPoints);
+extern void PolygonTriangulation(const std::vector<glm::dvec2> &polygonPoints, std::vector<glm::dvec2> &outPoints);
 }
 
 #endif // GEOMETRY_UTILS_HEADER

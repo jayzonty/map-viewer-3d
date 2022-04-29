@@ -1,6 +1,7 @@
 #include "Map/MapData.hpp"
 #include "Util/GeometryUtils.hpp"
 #include "glm/ext/scalar_constants.hpp"
+#include "glm/fwd.hpp"
 
 #include <algorithm>
 #include <limits>
@@ -9,6 +10,7 @@
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <vector>
 
 MapData::MapData()
 {
@@ -27,7 +29,7 @@ bool MapData::Parse(const std::string &mapFilePath)
         return false;
     }
 
-    std::map<int32_t, glm::vec2> nodeIdToLatLong;
+    std::map<int32_t, glm::dvec2> nodeIDToLonLat;
 
     tinyxml2::XMLElement *nodeElement = doc.FirstChildElement(OSM_ELEMENT_STR)->FirstChildElement(NODE_ELEMENT_STR);
     while (nodeElement != nullptr)
@@ -35,9 +37,9 @@ bool MapData::Parse(const std::string &mapFilePath)
         int32_t nodeId = nodeElement->IntAttribute(NODE_ID_ATTRIBUTE_STR);
         if (nodeId != 0) // TODO: Not sure if 0 is a valid node ID
         {
-            float lon = nodeElement->FloatAttribute(NODE_LON_ATTRIBUTE_STR);
-            float lat = nodeElement->FloatAttribute(NODE_LAT_ATTRIBUTE_STR);
-            nodeIdToLatLong[nodeId] = glm::vec2(lon, lat);
+            double lon = nodeElement->FloatAttribute(NODE_LON_ATTRIBUTE_STR);
+            double lat = nodeElement->FloatAttribute(NODE_LAT_ATTRIBUTE_STR);
+            nodeIDToLonLat[nodeId] = glm::dvec2(lon, lat);
         }
         nodeElement = nodeElement->NextSiblingElement(NODE_ELEMENT_STR);
     }
@@ -58,10 +60,10 @@ bool MapData::Parse(const std::string &mapFilePath)
             while (nodeRefElement != nullptr)
             {
                 int32_t nodeId = nodeRefElement->IntAttribute(WAY_NODE_REF_ATTRIBUTE_STR);
-                if (nodeIdToLatLong.find(nodeId) != nodeIdToLatLong.end())
+                if (nodeIDToLonLat.find(nodeId) != nodeIDToLonLat.end())
                 {
-                    double lon = nodeIdToLatLong[nodeId].x;
-                    double lat = nodeIdToLatLong[nodeId].y;
+                    double lon = nodeIDToLonLat[nodeId].x;
+                    double lat = nodeIDToLonLat[nodeId].y;
 
                     double x = glm::radians(lon) * EARTH_RADIUS * SCALE;
                     double y = glm::log(glm::tan(glm::radians(lat) / 2.0 + glm::pi<double>() / 4.0)) * EARTH_RADIUS * SCALE;
@@ -79,7 +81,7 @@ bool MapData::Parse(const std::string &mapFilePath)
                         maxY = glm::max(y, maxY);
                     }
 
-                    m_buildings.back().outline.push_back(glm::vec2(x, y));
+                    m_buildings.back().outline.push_back(glm::dvec2(x, y));
                 }
                 nodeRefElement = nodeRefElement->NextSiblingElement(WAY_NODE_ELEMENT_STR);
             }
@@ -144,16 +146,77 @@ bool MapData::Parse(const std::string &mapFilePath)
                 m_buildings.back().heightFromGround *= SCALE;
             }
         }
+        else if (HasChildTag(wayElement, HIGHWAY_TAG_KEY_STR))
+        {
+            m_highways.emplace_back();
+            tinyxml2::XMLElement *nodeRefElement = wayElement->FirstChildElement(WAY_NODE_ELEMENT_STR);
+            while (nodeRefElement != nullptr)
+            {
+                int32_t nodeId = nodeRefElement->IntAttribute(WAY_NODE_REF_ATTRIBUTE_STR);
+                if (nodeIDToLonLat.find(nodeId) != nodeIDToLonLat.end())
+                {
+                    double lon = nodeIDToLonLat[nodeId].x;
+                    double lat = nodeIDToLonLat[nodeId].y;
+
+                    double x = glm::radians(lon) * EARTH_RADIUS * SCALE;
+                    double y = glm::log(glm::tan(glm::radians(lat) / 2.0 + glm::pi<double>() / 4.0)) * EARTH_RADIUS * SCALE;
+
+                    m_highways.back().points.push_back(glm::dvec2(x, y));
+                }
+                nodeRefElement = nodeRefElement->NextSiblingElement(WAY_NODE_ELEMENT_STR);
+            }
+
+            double numLanes = 1.0;
+            double width = RESIDENTIAL_HIGHWAY_LANE_WIDTH_METERS;
+            const tinyxml2::XMLAttribute *highwayTypeAttrib = GetChildTagValue(wayElement, HIGHWAY_TAG_KEY_STR);
+            if (highwayTypeAttrib != nullptr)
+            {
+                if (strcmp(highwayTypeAttrib->Value(), "primary") == 0)
+                {
+                    width = PRIMARY_HIGHWAY_LANE_WIDTH_METERS;
+                }
+            }
+            const tinyxml2::XMLAttribute *lanesAttrib = GetChildTagValue(wayElement, HIGHWAY_LANES_TAG_KEY_STR);
+            if (lanesAttrib != nullptr)
+            {
+                numLanes = lanesAttrib->DoubleValue();
+            }
+            m_highways.back().roadWidth = width * numLanes * SCALE;
+
+            if (m_highways.back().points.size() == 0)
+            {
+                m_highways.pop_back();
+            }
+            else
+            {
+                glm::dvec2 min = m_highways.back().points[0];
+                glm::dvec2 max = min;
+                for (size_t i = 1; i < m_highways.back().points.size(); i++)
+                {
+                    min.x = glm::min(min.x, m_highways.back().points[i].x);
+                    min.y = glm::min(min.y, m_highways.back().points[i].y);
+                    max.x = glm::max(max.x, m_highways.back().points[i].x);
+                    max.y = glm::max(max.y, m_highways.back().points[i].y);
+                }
+
+                glm::dvec2 center = (min + max) / 2.0;
+                for (size_t i = 0; i < m_highways.back().points.size(); i++)
+                {
+                    m_highways.back().points[i] -= center;
+                }
+                m_highways.back().position = center;
+            }
+        }
 
         wayElement = wayElement->NextSiblingElement(WAY_ELEMENT_STR);
     }
 
     if (m_buildings.size() > 0)
     {
-        float minX = m_buildings[0].position.x;
-        float maxX = minX;
-        float minY = m_buildings[0].position.y;
-        float maxY = minY;
+        double minX = m_buildings[0].position.x;
+        double maxX = minX;
+        double minY = m_buildings[0].position.y;
+        double maxY = minY;
         for (size_t i = 1; i < m_buildings.size(); i++)
         {
             minX = glm::min(minX, m_buildings[i].position.x);
@@ -169,9 +232,9 @@ bool MapData::Parse(const std::string &mapFilePath)
             m_buildings[i].position -= m_position;
             for (size_t j = 0; j < m_buildings[i].outline.size(); j++)
             {
-                glm::vec2 &a = m_buildings[i].outline[j];
-                glm::vec2 &b = m_buildings[i].outline[(j + 1) % m_buildings[i].outline.size()];
-                glm::vec2 &c = m_buildings[i].outline[(j + 2) % m_buildings[i].outline.size()];
+                glm::dvec2 &a = m_buildings[i].outline[j];
+                glm::dvec2 &b = m_buildings[i].outline[(j + 1) % m_buildings[i].outline.size()];
+                glm::dvec2 &c = m_buildings[i].outline[(j + 2) % m_buildings[i].outline.size()];
 
                 if (GeometryUtils::IsCollinear(a, b, c))
                 {
@@ -191,9 +254,14 @@ bool MapData::Parse(const std::string &mapFilePath)
             }
         }
     }
-    
+
+    for (size_t i = 0; i < m_highways.size(); i++)
+    {
+        m_highways[i].position -= m_position;
+    }
 
     std::cout << "Num buildings: " << m_buildings.size() << std::endl;
+    std::cout << "Num highways: " << m_highways.size() << std::endl;
 
     return true;
 }

@@ -2,8 +2,10 @@
 #define MAP_DATA_HEADER
 
 #include "BuildingData.hpp"
-#include "glm/fwd.hpp"
-#include "tinyxml2.h"
+#include "HighwayData.hpp"
+
+#include <glm/fwd.hpp>
+#include <tinyxml2.h>
 
 #include <string>
 #include <vector>
@@ -30,12 +32,18 @@ private:
     const char *BUILDING_HEIGHT_TAG_KEY_STR = "height";
     const char *BUILDING_MIN_HEIGHT_TAG_KEY_STR = "min_height";
 
+    const char *HIGHWAY_TAG_KEY_STR = "highway";
+    const char *HIGHWAY_LANES_TAG_KEY_STR = "lanes";
+
     const double SCALE = 0.05;
     const double METERS_PER_LEVEL = 3.0;
+    const double PRIMARY_HIGHWAY_LANE_WIDTH_METERS = 2.0; 
+    const double RESIDENTIAL_HIGHWAY_LANE_WIDTH_METERS = 1.0; 
 
 private:
-    glm::vec2 m_position;
+    glm::dvec2 m_position;
     std::vector<BuildingData> m_buildings;
+    std::vector<HighwayData> m_highways;
 
 public:
     MapData();
@@ -46,6 +54,11 @@ public:
     const std::vector<BuildingData>* GetBuildings()
     {
         return &m_buildings;
+    }
+
+    const std::vector<HighwayData>& GetHighways()
+    {
+        return m_highways;
     }
 
 private:

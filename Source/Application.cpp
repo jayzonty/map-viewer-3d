@@ -4,6 +4,7 @@
 #include "Core/Input.hpp"
 #include "Core/Util/FileUtils.hpp"
 #include "Map/BuildingData.hpp"
+#include "Map/HighwayData.hpp"
 #include "Map/MapData.hpp"
 #include "Util/GeometryUtils.hpp"
 #include "Vertex.hpp"
@@ -65,7 +66,7 @@ void Application::Run()
     glm::vec3 topColor(0.9f);
     glm::vec3 bottomColor(0.35f);
 
-    std::vector<glm::vec2> pointsInTriangulation;
+    std::vector<glm::dvec2> pointsInTriangulation;
 
     std::vector<Vertex> vertices;
     for (size_t i = 0; i < buildings->size(); i++)
@@ -117,6 +118,48 @@ void Application::Run()
             vertices.emplace_back();
             vertices.back().position = { p0.x, buildingYOffset, p0.y };
             vertices.back().color = sideColor;
+        }
+    }
+
+    // Road vertices
+    const glm::vec3 roadColor(0.0f, 0.5f, 0.5f);
+    const std::vector<HighwayData> &highways = map.GetHighways();
+    for (size_t i = 0; i < highways.size(); i++)
+    {
+        double roadHeight = 0.0;
+        double width = highways.at(i).roadWidth;
+        for (size_t j = 1; j < highways.at(i).points.size(); j++)
+        {
+            const glm::dvec2 &a = highways.at(i).position + highways.at(i).points[j - 1];
+            const glm::dvec2 &b = highways.at(i).position + highways.at(i).points[j];
+
+            glm::dvec2 dir = b - a;
+            glm::dvec2 normal(-dir.y, dir.x);
+            normal = glm::normalize(normal);
+
+            glm::dvec2 p0 = a + normal * width / 2.0;
+            glm::dvec2 p1 = a - normal * width / 2.0;
+            glm::dvec2 p2 = b - normal * width / 2.0;
+            glm::dvec2 p3 = b + normal * width / 2.0;
+
+            vertices.emplace_back();
+            vertices.back().position = { p0.x, roadHeight, p0.y };
+            vertices.back().color = roadColor;
+            vertices.emplace_back();
+            vertices.back().position = { p1.x, roadHeight, p1.y };
+            vertices.back().color = roadColor;
+            vertices.emplace_back();
+            vertices.back().position = { p2.x, roadHeight, p2.y };
+            vertices.back().color = roadColor;
+            vertices.emplace_back();
+            vertices.back().position = { p2.x, roadHeight, p2.y };
+            vertices.back().color = roadColor;
+            vertices.emplace_back();
+            vertices.back().position = { p3.x, roadHeight, p3.y };
+            vertices.back().color = roadColor;
+            vertices.emplace_back();
+            vertices.back().position = { p0.x, roadHeight, p0.y };
+            vertices.back().color = roadColor;
         }
     }
 

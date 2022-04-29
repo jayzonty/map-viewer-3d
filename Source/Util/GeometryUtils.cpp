@@ -7,23 +7,23 @@
 
 namespace GeometryUtils
 {
-bool IsCollinear(const glm::vec2 &a, const glm::vec2 &b, const glm::vec2 &c)
+bool IsCollinear(const glm::dvec2 &a, const glm::dvec2 &b, const glm::dvec2 &c)
 {
-	glm::vec2 u = b - a;
-	glm::vec2 v = c - a;
+	glm::dvec2 u = b - a;
+	glm::dvec2 v = c - a;
 	float winding = u.x * v.y - v.x * u.y;
 	return glm::abs(winding) <= glm::epsilon<float>();
 }
 
-bool IsCCW(const glm::vec2 &a, const glm::vec2 &b, const glm::vec2 &c)
+bool IsCCW(const glm::dvec2 &a, const glm::dvec2 &b, const glm::dvec2 &c)
 {
-	glm::vec2 u = b - a;
-	glm::vec2 v = c - a;
+	glm::dvec2 u = b - a;
+	glm::dvec2 v = c - a;
 	float winding = u.x * v.y - v.x * u.y;
 	return winding > 0.0f;
 }
 
-bool IsPointInsideTriangle(const glm::vec2& point, const glm::vec2& a, const glm::vec2& b, const glm::vec2& c)
+bool IsPointInsideTriangle(const glm::dvec2& point, const glm::dvec2& a, const glm::dvec2& b, const glm::dvec2& c)
 {
 	bool ccw_AP_AB = IsCCW(a, point, b);
 	bool ccw_BP_BC = IsCCW(b, point, c);
@@ -32,13 +32,13 @@ bool IsPointInsideTriangle(const glm::vec2& point, const glm::vec2& a, const glm
 	return (!ccw_AP_AB) && (!ccw_BP_BC) && (!ccw_CP_CA);
 }
 
-bool IsPolygonCCW(const std::vector<glm::vec2> &polygonPoints)
+bool IsPolygonCCW(const std::vector<glm::dvec2> &polygonPoints)
 {
 	float sum = 0.0f;
 	for (size_t i = 0; i < polygonPoints.size(); i++)
 	{
-		const glm::vec2 &p0 = polygonPoints[i];
-		const glm::vec2 &p1 = polygonPoints[(i + 1) % polygonPoints.size()];
+		const glm::dvec2 &p0 = polygonPoints[i];
+		const glm::dvec2 &p1 = polygonPoints[(i + 1) % polygonPoints.size()];
 
 		sum += (p1.x - p0.x) * (p1.y + p0.y);
 	}
@@ -46,7 +46,7 @@ bool IsPolygonCCW(const std::vector<glm::vec2> &polygonPoints)
 	return (sum < 0.0f);
 }
 
-void PolygonTriangulation(const std::vector<glm::vec2> &polygonPoints, std::vector<glm::vec2> &outPoints)
+void PolygonTriangulation(const std::vector<glm::dvec2> &polygonPoints, std::vector<glm::dvec2> &outPoints)
 {
     outPoints.clear();
 
@@ -55,7 +55,7 @@ void PolygonTriangulation(const std::vector<glm::vec2> &polygonPoints, std::vect
 		return;
 	}
 
-	std::vector<glm::vec2> inputPointsCopy(polygonPoints.begin(), polygonPoints.end());
+	std::vector<glm::dvec2> inputPointsCopy(polygonPoints.begin(), polygonPoints.end());
 	while (inputPointsCopy.size() >= 3)
 	{
 		bool earFound = false;
@@ -66,9 +66,9 @@ void PolygonTriangulation(const std::vector<glm::vec2> &polygonPoints, std::vect
 			int32_t currIndex = i;
 			int32_t nextIndex = (i + 1) % numPoints;
 
-			glm::vec2 &prev = inputPointsCopy[prevIndex];
-			glm::vec2 &curr = inputPointsCopy[currIndex];
-			glm::vec2 &next = inputPointsCopy[nextIndex];
+			glm::dvec2 &prev = inputPointsCopy[prevIndex];
+			glm::dvec2 &curr = inputPointsCopy[currIndex];
+			glm::dvec2 &next = inputPointsCopy[nextIndex];
 
 			bool isEar = false;
 			if (IsCCW(prev, curr, next))
