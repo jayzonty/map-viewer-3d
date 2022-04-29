@@ -5,6 +5,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include <array>
+#include <vulkan/vulkan_core.h>
 
 /**
  * Struct containing data about a vertex
@@ -75,6 +76,13 @@ struct Vertex
         ret.back().location = 2;
         ret.back().offset = offsetof(Vertex, uv);
         ret.back().format = VK_FORMAT_R32G32_SFLOAT; // Two 32-bit signed floats
+
+        // Normal
+        ret.emplace_back();
+        ret.back().binding = 0;
+        ret.back().location = 3;
+        ret.back().offset = offsetof(Vertex, normal);
+        ret.back().format = VK_FORMAT_R32G32B32_SFLOAT; // Three 32-bit signed floats
 
         return ret;
     }

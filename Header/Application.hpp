@@ -12,155 +12,80 @@
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_core.h>
 
+#include <cstdalign>
+
 class Application
 {
 private:
-    /**
-     * Push constant
-     */
+    // Push constant data
     struct PushConstant
     {
-        glm::mat4 projView;
-        uint32_t uboIndex;
+        glm::mat4 projView; // Combined projection-view matrix
     };
 
-    /**
-     * Uniform buffer object
-     */
-    struct UniformBufferObject
+    // Uniform buffer for camera data
+    struct CameraData
     {
-        glm::mat4 model;
+        alignas(16) glm::vec3 position; // Camera position
     };
 
-    /**
-     * Struct containing data needed for a frame
-     */
+    // Uniform buffer for light data 
+    struct LightData
+    {
+        alignas(16) glm::vec4 lightPosition;    // Light position
+
+        alignas(16) glm::vec3 ambient;          // Ambient intensity
+        alignas(16) glm::vec3 diffuse;          // Diffuse intensity
+        alignas(16) glm::vec3 specular;         // Specular intensity
+    };
+
+    // Struct containing data needed for a frame
     struct FrameData
     {
-        /**
-         * Frame image
-         */
-        VkImage image;
-
-        /**
-         * Frame image view
-         */
-        VulkanImageView imageView;
-
-        /**
-         * Framebuffer
-         */
-        VkFramebuffer framebuffer;
-
-        /**
-         * Frame commandbuffer
-         */
-        VkCommandBuffer commandBuffer;
+        VkImage image;                  // Frame image
+        VulkanImageView imageView;      // Image view for the frame image
+        VkFramebuffer framebuffer;      // Framebuffer
+        VkCommandBuffer commandBuffer;  // Command buffer
 
         // --- Synchronization ---
-
-        /**
-         * Semaphore that is signalled when the next image to use
-         * is available and ready for rendering
-         */
-        VkSemaphore imageAvailableSemaphore;
-
-        /**
-         * Semaphore that is signalled when the rendering has been done
-         * and is render for presenting (used for waiting before presenting)
-         */
-        VkSemaphore renderDoneSemaphore;
-
-        /**
-         * Fence signalled when the rendering for this frame is done
-         */
-        VkFence renderDoneFence;
+        VkSemaphore imageAvailableSemaphore;    // Semaphore signalled when the next image is available and ready for rendering
+        VkSemaphore renderDoneSemaphore;        // Semaphore signalled when rendering is done and is ready for presenting
+        VkFence renderDoneFence;                // Fence signalled when the rendering for this frame is done
 
         // --- Descriptor sets ---
-
-        VkDescriptorSet descriptorSet;
-
-        VulkanBuffer uniformBuffer;
+        VkDescriptorSet descriptorSet;          // Descriptor set for this frame
+        VulkanBuffer lightDataUniformBuffer;    // Uniform buffer for the light data
+        VulkanBuffer cameraDataUniformBuffer;   // Uniform buffer for the camera data
     };
 
 private:
-    /**
-     * Flag indicating whether the application is running
-     */
-    bool m_isRunning;
+    bool m_isRunning;   // Flag indicating whether the application is running
 
-    /**
-     * Window
-     */
-    Window m_window;
+    Window m_window;    // Window
 
-    /**
-     * Swapchain
-     */
-    VkSwapchainKHR m_vkSwapchain;
+    VkSwapchainKHR m_vkSwapchain;           // Swapchain
+    VkFormat m_vkSwapchainImageFormat;      // Swapchain image format
+    VkExtent2D m_vkSwapchainImageExtent;    // Swapchain image extent
 
-    /**
-     * Swapchain image format
-     */
-    VkFormat m_vkSwapchainImageFormat;
+    uint32_t m_maxFramesInFlight;           // Maximum number of frames in flight
 
-    /**
-     * Swapchain image extent
-     */
-    VkExtent2D m_vkSwapchainImageExtent;
+    VkRenderPass m_vkRenderPass;            // Render pass
+    VkPipelineLayout m_vkPipelineLayout;    // Pipeline layout
+    VkPipeline m_vkPipeline;                // Pipeline
 
-    /**
-     * Maximum number of frames in flight
-     */
-    uint32_t m_maxFramesInFlight;
+    VkCommandPool m_vkCommandPool;          // Command pool
 
-    /**
-     * Render pass
-     */
-    VkRenderPass m_vkRenderPass;
+    std::vector<FrameData> m_frameDataList; // List containing data for each frame
 
-    /**
-     * Pipeline layout
-     */
-    VkPipelineLayout m_vkPipelineLayout;
+    VulkanBuffer m_testVertexBuffer;        // Test vertex buffer
 
-    /**
-     * Pipeline
-     */
-    VkPipeline m_vkPipeline;
+    VulkanImage m_vkDepthBufferImage;           // Image for the depth buffer
+    VulkanImageView m_vkDepthBufferImageView;   // Image view for the depth buffer image
 
-    /**
-     * Command pool
-     */
-    VkCommandPool m_vkCommandPool;
+    VkDescriptorSetLayout m_vkDescriptorSetLayout;  // Descriptor set layout
+    VkDescriptorPool m_vkDescriptorPool;            // Descriptor pool
 
-    /**
-     * List containing data for each frame
-     */
-    std::vector<FrameData> m_frameDataList;
-
-    /**
-     * Test vertex buffer
-     */
-    VulkanBuffer m_testVertexBuffer;
-
-    /**
-     * Image for the depth buffer
-     */
-    VulkanImage m_vkDepthBufferImage;
-
-    /**
-     * Image view for the depth buffer image
-     */
-    VulkanImageView m_vkDepthBufferImageView;
-
-    VkDescriptorSetLayout m_vkDescriptorSetLayout;
-    VkDescriptorPool m_vkDescriptorPool;
-
-    /**
-     * Camera
-     */
-    Camera m_camera;
+    Camera m_camera;    // Camera
 
 public:
     /**
@@ -227,6 +152,10 @@ private:
      */
     bool InitCommandBuffers();
 
+    /**
+     * @brief Initializes descriptors
+     * @return Returns true if the initialization was successful. Returns false otherwise.
+     */
     bool InitDescriptors();
 
     /**

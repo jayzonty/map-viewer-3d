@@ -83,6 +83,7 @@ void Application::Run()
             vertices.back().position.y = buildingYOffset + buildingHeight;
             vertices.back().position.z = buildings->at(i).position.y + pointsInTriangulation[j].y;
             vertices.back().color = topColor;
+            vertices.back().normal = { 0.0f, 1.0f, 0.0f };
         }
         // Bottom
         for (size_t j = pointsInTriangulation.size(); j > 0; j--)
@@ -92,6 +93,7 @@ void Application::Run()
             vertices.back().position.y = buildingYOffset;
             vertices.back().position.z = buildings->at(i).position.y + pointsInTriangulation[j - 1].y;
             vertices.back().color = bottomColor;
+            vertices.back().normal = { 0.0f, -1.0f, 0.0f };
         }
 
         // Extrude
@@ -118,6 +120,19 @@ void Application::Run()
             vertices.emplace_back();
             vertices.back().position = { p0.x, buildingYOffset, p0.y };
             vertices.back().color = sideColor;
+
+            for (size_t k = 0; k < 2; ++k)
+            {
+                size_t offset = k * 3;
+                const glm::vec3 a = vertices[vertices.size() - 1 - (offset + 2)].position;
+                const glm::vec3 b = vertices[vertices.size() - 1 - (offset + 1)].position;
+                const glm::vec3 c = vertices[vertices.size() - 1 - (offset + 0)].position;
+
+                glm::vec3 normal = glm::normalize(glm::cross(b - a, c - a));
+                vertices[vertices.size() - 1 - (offset + 2)].normal = normal;
+                vertices[vertices.size() - 1 - (offset + 1)].normal = normal;
+                vertices[vertices.size() - 1 - (offset + 0)].normal = normal;
+            }
         }
     }
 
@@ -145,21 +160,27 @@ void Application::Run()
             vertices.emplace_back();
             vertices.back().position = { p0.x, roadHeight, p0.y };
             vertices.back().color = roadColor;
+            vertices.back().normal = { 0.0f, 1.0f, 0.0f };
             vertices.emplace_back();
             vertices.back().position = { p1.x, roadHeight, p1.y };
             vertices.back().color = roadColor;
+            vertices.back().normal = { 0.0f, 1.0f, 0.0f };
             vertices.emplace_back();
             vertices.back().position = { p2.x, roadHeight, p2.y };
             vertices.back().color = roadColor;
+            vertices.back().normal = { 0.0f, 1.0f, 0.0f };
             vertices.emplace_back();
             vertices.back().position = { p2.x, roadHeight, p2.y };
             vertices.back().color = roadColor;
+            vertices.back().normal = { 0.0f, 1.0f, 0.0f };
             vertices.emplace_back();
             vertices.back().position = { p3.x, roadHeight, p3.y };
             vertices.back().color = roadColor;
+            vertices.back().normal = { 0.0f, 1.0f, 0.0f };
             vertices.emplace_back();
             vertices.back().position = { p0.x, roadHeight, p0.y };
             vertices.back().color = roadColor;
+            vertices.back().normal = { 0.0f, 1.0f, 0.0f };
         }
     }
 
@@ -307,16 +328,20 @@ void Application::Run()
         VkBuffer vertexBuffers[] = { m_testVertexBuffer.GetHandle() };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, &offset);
 
-        // Update UBO
-        /*glm::mat4 model(1.0f);
-        UniformBufferObject *ubo = reinterpret_cast<UniformBufferObject*>(m_frameDataList[currentFrame].uniformBuffer.MapMemory(0, sizeof(UniformBufferObject) * 1000));
-        for (size_t i = 0; i < 1000; i++)
-        {
-            ubo[i].model = model;
-        }
-        m_frameDataList[currentFrame].uniformBuffer.UnmapMemory();*/
+        // Update camera UBO
+        CameraData *cameraDataUBO = reinterpret_cast<CameraData*>(m_frameDataList[currentFrame].cameraDataUniformBuffer.MapMemory(0, sizeof(CameraData)));
+        cameraDataUBO->position = m_camera.GetPosition();
+        m_frameDataList[currentFrame].cameraDataUniformBuffer.UnmapMemory();
 
-        //vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipelineLayout, 0, 1, &m_frameDataList[currentFrame].descriptorSet, 0, nullptr);
+        // Update LightData UBO
+        LightData *lightDataUBO = reinterpret_cast<LightData*>(m_frameDataList[currentFrame].lightDataUniformBuffer.MapMemory(0, sizeof(LightData)));
+        lightDataUBO->lightPosition = glm::vec4(0.0f, -1.0f, 1.0f, 0.0f);
+        lightDataUBO->ambient = { 0.1f, 0.1f, 0.1f };
+        lightDataUBO->diffuse = { 1.0f, 1.0f, 1.0f };
+        lightDataUBO->specular = { 1.0f, 1.0f, 1.0 };
+        m_frameDataList[currentFrame].lightDataUniformBuffer.UnmapMemory();
+
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipelineLayout, 0, 1, &m_frameDataList[currentFrame].descriptorSet, 0, nullptr);
 
         glm::mat4 projView = m_camera.GetProjectionMatrix() * m_camera.GetViewMatrix();
         // Push constants
@@ -510,7 +535,8 @@ void Application::Cleanup()
 
     for (size_t i = 0; i < m_frameDataList.size(); i++)
     {
-        m_frameDataList[i].uniformBuffer.Cleanup();
+        m_frameDataList[i].cameraDataUniformBuffer.Cleanup();
+        m_frameDataList[i].lightDataUniformBuffer.Cleanup();
     }
 
     vkDestroyDescriptorPool(VulkanContext::GetLogicalDevice(), m_vkDescriptorPool, nullptr);
@@ -895,18 +921,29 @@ bool Application::InitCommandBuffers()
     return true;
 }
 
+/**
+ * @brief Initializes descriptors
+ * @return Returns true if the initialization was successful. Returns false otherwise.
+ */
 bool Application::InitDescriptors()
 {
-    VkDescriptorSetLayoutBinding uboLayoutBinding = {};
-    uboLayoutBinding.binding = 0;
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboLayoutBinding.descriptorCount = 1;
-    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    VkDescriptorSetLayoutBinding cameraUBOBinding = {};
+    cameraUBOBinding.binding = 0;
+    cameraUBOBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    cameraUBOBinding.descriptorCount = 1;
+    cameraUBOBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+    VkDescriptorSetLayoutBinding lightUBOBinding = {};
+    lightUBOBinding.binding = 1;
+    lightUBOBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    lightUBOBinding.descriptorCount = 1;
+    lightUBOBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings = { cameraUBOBinding, lightUBOBinding };
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 1;
-    layoutInfo.pBindings = &uboLayoutBinding;
+    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    layoutInfo.pBindings = bindings.data();
 
     if (vkCreateDescriptorSetLayout(VulkanContext::GetLogicalDevice(), &layoutInfo, nullptr, &m_vkDescriptorSetLayout) != VK_SUCCESS)
     {
@@ -914,12 +951,18 @@ bool Application::InitDescriptors()
         return false;
     }
 
-    VkDeviceSize bufferSize = sizeof(UniformBufferObject) * 2;
+    VkDeviceSize cameraUBOBufferSize = sizeof(CameraData) * m_frameDataList.size();
+    VkDeviceSize lightUBOBufferSize = sizeof(LightData) * m_frameDataList.size();
     for (size_t i = 0; i < m_frameDataList.size(); i++)
     {
-        if (!m_frameDataList[i].uniformBuffer.Create(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
+        if (!m_frameDataList[i].cameraDataUniformBuffer.Create(cameraUBOBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
         {
-            std::cerr << "[Application] Failed to create uniform buffer!" << std::endl;
+            std::cerr << "[Application] Failed to create uniform buffer for camera data!" << std::endl;
+            return false;
+        }
+        if (!m_frameDataList[i].lightDataUniformBuffer.Create(lightUBOBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
+        {
+            std::cerr << "[Application] Failed to create uniform buffer for light data!" << std::endl;
             return false;
         }
     }
@@ -958,21 +1001,37 @@ bool Application::InitDescriptors()
     {
         m_frameDataList[i].descriptorSet = descriptorSets[i];
 
-        VkDescriptorBufferInfo bufferInfo = {};
-        bufferInfo.buffer = m_frameDataList[i].uniformBuffer.GetHandle();
-        bufferInfo.offset = 0;
-        bufferInfo.range = sizeof(UniformBufferObject); // or VK_WHOLE_SIZE
+        // Camera UBO
+        VkDescriptorBufferInfo cameraUBO = {};
+        cameraUBO.buffer = m_frameDataList[i].cameraDataUniformBuffer.GetHandle();
+        cameraUBO.offset = 0;
+        cameraUBO.range = sizeof(CameraData); // or VK_WHOLE_SIZE
 
-        VkWriteDescriptorSet descriptorWrite = {};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = m_frameDataList[i].descriptorSet;
-        descriptorWrite.dstBinding = 0;
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pBufferInfo = &bufferInfo;
+        VkDescriptorBufferInfo lightUBO = {};
+        lightUBO.buffer = m_frameDataList[i].lightDataUniformBuffer.GetHandle();
+        lightUBO.offset = 0;
+        lightUBO.range = sizeof(LightData);
 
-        vkUpdateDescriptorSets(VulkanContext::GetLogicalDevice(), 1, &descriptorWrite, 0, nullptr);
+        VkWriteDescriptorSet cameraUBOWrite = {};
+        cameraUBOWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        cameraUBOWrite.dstSet = m_frameDataList[i].descriptorSet;
+        cameraUBOWrite.dstBinding = 0;
+        cameraUBOWrite.dstArrayElement = 0;
+        cameraUBOWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        cameraUBOWrite.descriptorCount = 1;
+        cameraUBOWrite.pBufferInfo = &cameraUBO;
+
+        VkWriteDescriptorSet lightUBOWrite = {};
+        lightUBOWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        lightUBOWrite.dstSet = m_frameDataList[i].descriptorSet;
+        lightUBOWrite.dstBinding = 1;
+        lightUBOWrite.dstArrayElement = 0;
+        lightUBOWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        lightUBOWrite.descriptorCount = 1;
+        lightUBOWrite.pBufferInfo = &lightUBO;
+
+        std::array<VkWriteDescriptorSet, 2> writes = { cameraUBOWrite, lightUBOWrite };
+        vkUpdateDescriptorSets(VulkanContext::GetLogicalDevice(), writes.size(), writes.data(), 0, nullptr);
     }
 
     return true;
