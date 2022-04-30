@@ -20,6 +20,7 @@ private:
     // Push constant data
     struct PushConstant
     {
+        glm::mat4 lightProjView;
         glm::mat4 projView; // Combined projection-view matrix
     };
 
@@ -42,10 +43,14 @@ private:
     // Struct containing data needed for a frame
     struct FrameData
     {
-        VkImage image;                  // Frame image
-        VulkanImageView imageView;      // Image view for the frame image
-        VkFramebuffer framebuffer;      // Framebuffer
-        VkCommandBuffer commandBuffer;  // Command buffer
+        VulkanImage shadowMapImage;         // Image for the shadow map
+        VulkanImageView shadowMapImageView; // Image view for the shadow map image
+        VkFramebuffer shadowMapFramebuffer; // Framebuffer for the shadow map
+
+        VkImage image;                      // Frame image
+        VulkanImageView imageView;          // Image view for the frame image
+        VkFramebuffer framebuffer;          // Framebuffer
+        VkCommandBuffer commandBuffer;      // Command buffer
 
         // --- Synchronization ---
         VkSemaphore imageAvailableSemaphore;    // Semaphore signalled when the next image is available and ready for rendering
@@ -69,7 +74,10 @@ private:
 
     uint32_t m_maxFramesInFlight;           // Maximum number of frames in flight
 
+    VkRenderPass m_shadowRenderPass;        // Render pass for the shadow pass
     VkRenderPass m_vkRenderPass;            // Render pass
+    VkPipelineLayout m_shadowPipelineLayout;    // Pipeline layout for the shadow pass
+    VkPipeline m_shadowPipeline;                // Pipeline object for the shadow pass
     VkPipelineLayout m_vkPipelineLayout;    // Pipeline layout
     VkPipeline m_vkPipeline;                // Pipeline
 
@@ -84,6 +92,8 @@ private:
 
     VkDescriptorSetLayout m_vkDescriptorSetLayout;  // Descriptor set layout
     VkDescriptorPool m_vkDescriptorPool;            // Descriptor pool
+
+    VkSampler m_shadowMapSampler;           // sampler for the shadow map
 
     Camera m_camera;    // Camera
 
@@ -121,6 +131,12 @@ private:
      * @return Returns true if the initialization was successful. Returns false otherwise.
      */
     bool InitSwapchain();
+
+    /**
+     * @brief Initializes all things needed for a shadow pass
+     * @return Returns true if the initialization was successful. Returns false otherwise.
+     */
+    bool InitShadowPass();
 
     /**
      * @brief Initializes the Vulkan render pass.

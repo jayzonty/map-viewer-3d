@@ -23,6 +23,9 @@
 #include <cstring>
 #include <iostream>
 
+const uint32_t SHADOW_MAP_WIDTH = 1024;
+const uint32_t SHADOW_MAP_HEIGHT = 1024;
+
 /**
  * @brief Constructor
  */
@@ -128,7 +131,7 @@ void Application::Run()
                 const glm::vec3 b = vertices[vertices.size() - 1 - (offset + 1)].position;
                 const glm::vec3 c = vertices[vertices.size() - 1 - (offset + 0)].position;
 
-                glm::vec3 normal = glm::normalize(glm::cross(b - a, c - a));
+                glm::vec3 normal = glm::normalize(glm::cross(c - a, b - a));
                 vertices[vertices.size() - 1 - (offset + 2)].normal = normal;
                 vertices[vertices.size() - 1 - (offset + 1)].normal = normal;
                 vertices[vertices.size() - 1 - (offset + 0)].normal = normal;
@@ -197,7 +200,10 @@ void Application::Run()
     m_camera.SetFieldOfView(60.0f);
     m_camera.SetAspectRatio(m_window.GetWidth() * 1.0f / m_window.GetHeight());
     m_camera.SetPosition(glm::vec3(0.0f, 2.0f, 3.0f));
+    m_camera.SetPosition(glm::vec3(-10.0f, 10.0f, 2.0f));
     m_camera.SetWorldUpVector(glm::vec3(0.0f, 1.0f, 0.0f));
+
+    glm::vec3 dirLightDirection = glm::vec3(0.0f, -1.0f, 1.0f);
 
     uint32_t currentFrame = 0;
 
@@ -212,11 +218,11 @@ void Application::Run()
         glm::vec3 cameraMovement(0.0f);
         if (Input::IsKeyDown(Input::Key::W))
         {
-            cameraMovement.z =  -1.0f;
+            cameraMovement.z =  1.0f;
         }
         if (Input::IsKeyDown(Input::Key::S))
         {
-            cameraMovement.z =  1.0f;
+            cameraMovement.z = -1.0f;
         }
         if (Input::IsKeyDown(Input::Key::A))
         {
@@ -232,8 +238,8 @@ void Application::Run()
         }
         cameraMovement *= 5.0f * deltaTime;
 
-        float yaw = m_camera.GetYaw() - Input::GetMouseDeltaX() * 0.25f;
-        float pitch = m_camera.GetPitch() + Input::GetMouseDeltaY() * 0.25f;
+        float yaw = m_camera.GetYaw() + Input::GetMouseDeltaX() * 0.25f;
+        float pitch = m_camera.GetPitch() - Input::GetMouseDeltaY() * 0.25f;
         pitch = glm::clamp(pitch, -89.0f, 89.0f);
         m_camera.SetYaw(yaw);
         m_camera.SetPitch(pitch);
@@ -292,6 +298,56 @@ void Application::Run()
             continue;
         }
 
+        glm::mat4 lightProj = glm::orthoRH_ZO(-20.0f, 20.0f, -20.0f, 20.0f, 1.0f, 50.0f);
+        lightProj[1][1] *= -1.0f;
+        glm::mat4 lightView = glm::lookAt(m_camera.GetPosition() - dirLightDirection * 5.0f, m_camera.GetPosition(), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 lightMatrix = lightProj * lightView;
+        {
+            // Begin shadow pass
+            VkRenderPassBeginInfo shadowPassBeginInfo {};
+            shadowPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            shadowPassBeginInfo.renderPass = m_shadowRenderPass;
+            shadowPassBeginInfo.framebuffer = m_frameDataList[currentFrame].shadowMapFramebuffer;
+            shadowPassBeginInfo.renderArea.offset = { 0, 0 };
+            shadowPassBeginInfo.renderArea.extent = { SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT };
+            std::array<VkClearValue, 1> shadowClearValues;
+            shadowClearValues[0].depthStencil = { 1.0f, 0 };
+            shadowPassBeginInfo.clearValueCount = static_cast<uint32_t>(shadowClearValues.size());
+            shadowPassBeginInfo.pClearValues = shadowClearValues.data();
+            vkCmdBeginRenderPass(commandBuffer, &shadowPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+            // Viewport and scissors are dynamic, so we set here as a command
+            float viewportHeight = static_cast<float>(SHADOW_MAP_HEIGHT);
+            VkViewport viewport {};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = static_cast<float>(SHADOW_MAP_WIDTH);
+            viewport.height = viewportHeight;
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+            VkRect2D scissor {};
+            scissor.offset = { 0, 0 };
+            scissor.extent = { SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT } ;
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
+
+            VkDeviceSize offset = 0;
+            VkBuffer vertexBuffers[] = { m_testVertexBuffer.GetHandle() };
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, &offset);
+            
+            // Push constants
+            PushConstant pushConstant;
+            pushConstant.projView = lightMatrix;
+            vkCmdPushConstants(commandBuffer, m_shadowPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pushConstant);
+
+            vkCmdDraw(commandBuffer, vertices.size(), 1, 0, 0);
+
+            vkCmdEndRenderPass(commandBuffer);
+        }
+
         // Begin render pass
         VkRenderPassBeginInfo renderPassBeginInfo {};
         renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -310,9 +366,9 @@ void Application::Run()
         float viewportHeight = static_cast<float>(m_vkSwapchainImageExtent.height);
         VkViewport viewport {};
         viewport.x = 0.0f;
-        viewport.y = viewportHeight;
+        viewport.y = 0.0f;
         viewport.width = static_cast<float>(m_vkSwapchainImageExtent.width);
-        viewport.height = -viewportHeight; // Supported from Vulkan 1.1 to switch from Y=down convention
+        viewport.height = viewportHeight; // Supported from Vulkan 1.1 to switch from Y=down convention
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -335,7 +391,7 @@ void Application::Run()
 
         // Update LightData UBO
         LightData *lightDataUBO = reinterpret_cast<LightData*>(m_frameDataList[currentFrame].lightDataUniformBuffer.MapMemory(0, sizeof(LightData)));
-        lightDataUBO->lightPosition = glm::vec4(0.0f, -1.0f, 1.0f, 0.0f);
+        lightDataUBO->lightPosition = glm::vec4(dirLightDirection, 0.0f);
         lightDataUBO->ambient = { 0.1f, 0.1f, 0.1f };
         lightDataUBO->diffuse = { 1.0f, 1.0f, 1.0f };
         lightDataUBO->specular = { 1.0f, 1.0f, 1.0 };
@@ -346,6 +402,7 @@ void Application::Run()
         glm::mat4 projView = m_camera.GetProjectionMatrix() * m_camera.GetViewMatrix();
         // Push constants
         PushConstant pushConstant;
+        pushConstant.lightProjView = lightMatrix;
         pushConstant.projView = projView;
         vkCmdPushConstants(commandBuffer, m_vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pushConstant);
         vkCmdDraw(commandBuffer, vertices.size(), 1, 0, 0);
@@ -456,6 +513,10 @@ bool Application::Init()
     {
         std::cerr << "[Application] Failed to initialize Vulkan swapchain!" << std::endl;
     }
+    if (!InitShadowPass())
+    {
+        std::cerr << "[Application] Failed to initialize resources for shadow pass!" << std::endl;
+    }
     if (!InitRenderPass())
     {
         std::cerr << "[Application] Failed to initialize Vulkan renderpass!" << std::endl;
@@ -528,6 +589,10 @@ void Application::Cleanup()
         vkDestroySemaphore(VulkanContext::GetLogicalDevice(), m_frameDataList[i].renderDoneSemaphore, nullptr);
     }
 
+    vkDestroyPipeline(VulkanContext::GetLogicalDevice(), m_shadowPipeline, nullptr);
+    m_shadowPipeline = VK_NULL_HANDLE;
+    vkDestroyPipelineLayout(VulkanContext::GetLogicalDevice(), m_shadowPipelineLayout, nullptr);
+    m_shadowPipelineLayout = VK_NULL_HANDLE;
     vkDestroyPipeline(VulkanContext::GetLogicalDevice(), m_vkPipeline, nullptr);
     m_vkPipeline = VK_NULL_HANDLE;
     vkDestroyPipelineLayout(VulkanContext::GetLogicalDevice(), m_vkPipelineLayout, nullptr);
@@ -544,11 +609,17 @@ void Application::Cleanup()
     vkDestroyDescriptorSetLayout(VulkanContext::GetLogicalDevice(), m_vkDescriptorSetLayout, nullptr);
     m_vkDescriptorSetLayout = VK_NULL_HANDLE;
 
+    vkDestroySampler(VulkanContext::GetLogicalDevice(), m_shadowMapSampler, nullptr);
+    m_shadowMapSampler = VK_NULL_HANDLE;
+
     m_vkDepthBufferImageView.Cleanup();
     m_vkDepthBufferImage.Cleanup();
 
     for (size_t i = 0; i < m_frameDataList.size(); i++)
     {
+        vkDestroyFramebuffer(VulkanContext::GetLogicalDevice(), m_frameDataList[i].shadowMapFramebuffer, nullptr);
+        m_frameDataList[i].shadowMapImageView.Cleanup();
+        m_frameDataList[i].shadowMapImage.Cleanup();
         vkDestroyFramebuffer(VulkanContext::GetLogicalDevice(), m_frameDataList[i].framebuffer, nullptr);
         m_frameDataList[i].imageView.Cleanup();
         vkFreeCommandBuffers(VulkanContext::GetLogicalDevice(), m_vkCommandPool, 1, &m_frameDataList[i].commandBuffer);
@@ -560,6 +631,8 @@ void Application::Cleanup()
 
     vkDestroyRenderPass(VulkanContext::GetLogicalDevice(), m_vkRenderPass, nullptr);
     m_vkRenderPass = VK_NULL_HANDLE;
+    vkDestroyRenderPass(VulkanContext::GetLogicalDevice(), m_shadowRenderPass, nullptr);
+    m_shadowRenderPass = VK_NULL_HANDLE;
 
     vkDestroySwapchainKHR(VulkanContext::GetLogicalDevice(), m_vkSwapchain, nullptr);
     m_vkSwapchain = VK_NULL_HANDLE;
@@ -727,13 +800,180 @@ bool Application::InitSwapchain()
 }
 
 /**
+ * @brief Initializes all things needed for a shadow pass
+ * @return Returns true if the initialization was successful. Returns false otherwise.
+ */
+bool Application::InitShadowPass()
+{
+    // --- Render pass ---
+
+    VkAttachmentDescription depthAttachment = {};
+    depthAttachment.format = VK_FORMAT_D32_SFLOAT;
+    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
+    VkAttachmentReference depthAttachmentReference = {};
+    depthAttachmentReference.attachment = 0;
+    depthAttachmentReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpassDescription = {};
+    subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpassDescription.colorAttachmentCount = 0;
+    subpassDescription.pColorAttachments = nullptr;
+    subpassDescription.pDepthStencilAttachment = &depthAttachmentReference;
+
+    VkSubpassDependency depthDependency = {};
+    depthDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    depthDependency.srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    depthDependency.srcAccessMask = 0;
+    depthDependency.dstSubpass = 0;
+    depthDependency.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    depthDependency.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+    std::array<VkAttachmentDescription, 1> attachments = { depthAttachment };
+    std::array<VkSubpassDependency, 1> dependencies = { depthDependency };
+    VkRenderPassCreateInfo renderPassCreateInfo = {};
+    renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassCreateInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+    renderPassCreateInfo.pAttachments = attachments.data();
+    renderPassCreateInfo.subpassCount = 1;
+    renderPassCreateInfo.pSubpasses = &subpassDescription;
+    renderPassCreateInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+    renderPassCreateInfo.pDependencies = dependencies.data();
+
+    if (vkCreateRenderPass(VulkanContext::GetLogicalDevice(), &renderPassCreateInfo, nullptr, &m_shadowRenderPass) != VK_SUCCESS)
+    {
+        std::cout << "Failed to create render pass for the shadow map!" << std::endl;
+        return false;
+    }
+    
+    // --- Image and image view
+    for (size_t i = 0; i < m_frameDataList.size(); ++i)
+    {
+        if (!m_frameDataList[i].shadowMapImage.Create(
+            SHADOW_MAP_WIDTH, 
+            SHADOW_MAP_HEIGHT,
+            VK_FORMAT_D32_SFLOAT,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        ))
+        {
+            std::cout << "Failed to create image for the shadow map!" << std::endl;
+            return false;
+        }
+
+        if (!m_frameDataList[i].shadowMapImageView.Create(
+            m_frameDataList[i].shadowMapImage.GetHandle(),
+            VK_FORMAT_D32_SFLOAT, 
+            VK_IMAGE_ASPECT_DEPTH_BIT))
+        {
+            std::cout << "Failed to create image view for the shadow map!" << std::endl;
+            return false;
+        }
+    }
+
+    // --- Framebuffer ---
+    for (size_t i = 0; i < m_frameDataList.size(); ++i)
+    {
+        std::array<VkImageView, 1> attachments =
+        {
+            m_frameDataList[i].shadowMapImageView.GetHandle(),
+        };
+
+        VkFramebufferCreateInfo framebufferCreateInfo = {};
+        framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferCreateInfo.renderPass = m_shadowRenderPass;
+        framebufferCreateInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        framebufferCreateInfo.pAttachments = attachments.data();
+        framebufferCreateInfo.width = SHADOW_MAP_WIDTH;
+        framebufferCreateInfo.height = SHADOW_MAP_HEIGHT;
+        framebufferCreateInfo.layers = 1;
+
+        if (vkCreateFramebuffer(VulkanContext::GetLogicalDevice(), &framebufferCreateInfo, nullptr, &m_frameDataList[i].shadowMapFramebuffer) != VK_SUCCESS)
+        {
+            std::cout << "Failed to create a framebuffer for the shadow map!" << std::endl;
+            return false;
+        }
+    }
+
+    // --- Pipeline ---
+    VulkanGraphicsPipelineBuilder builder {};
+
+    // --- Vertex input ---
+    std::vector<VkVertexInputBindingDescription> bindings = Vertex::GetBindingDescriptions();
+    std::vector<VkVertexInputAttributeDescription> attributes = Vertex::GetAttributeDescriptions();
+    builder
+        .SetVertexBindingDescriptions(bindings)
+        .SetVertexAttributeDescriptions(attributes);
+
+    // --- Input assembly ---
+    builder.SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+
+    // --- Viewport and scissors ---
+    // Both are meant to be dynamic, so we only set the number of viewports and scissors, but not the actual data yet
+    builder.SetViewportCount(1);
+    builder.SetScissorCount(1);
+
+    // --- Rasterizer ---
+    builder
+        .SetPolygonMode(VK_POLYGON_MODE_FILL)
+        .SetCullMode(VK_CULL_MODE_BACK_BIT)
+        .SetFrontFace(VK_FRONT_FACE_CLOCKWISE);
+
+    // --- Multisampling ---
+
+    // --- Depth & stencil ---
+    builder
+        .SetDepthTestEnabled(VK_TRUE)
+        .SetDepthWriteEnabled(VK_TRUE)
+        .SetDepthCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
+
+    // --- Color blending ---
+
+    // --- Dynamic state ---
+    // (Attributes specified here will have to be specified at drawing time)
+    std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    builder.SetDynamicStates(dynamicStates);
+
+    // --- Pipeline layout ---
+    std::vector<VkPushConstantRange> pushConstantRanges;
+    pushConstantRanges.emplace_back();
+    pushConstantRanges.back().offset = 0;
+    pushConstantRanges.back().size = static_cast<uint32_t>(sizeof(PushConstant));
+    pushConstantRanges.back().stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    builder.SetPushConstantRanges(pushConstantRanges);
+    
+    // --- Shaders ---
+    builder
+        .SetVertexShaderFilePath("Resources/Shaders/shadow_vert.spv")
+        .SetFragmentShaderFilePath("Resources/Shaders/shadow_frag.spv");
+
+    builder.SetRenderPass(m_shadowRenderPass);
+
+    if (!builder.Build())
+    {
+        std::cout << "Failed to build pipeline for shadow pass!" << std::endl;
+        return false;
+    }
+
+    m_shadowPipelineLayout = builder.GetPipelineLayout();
+    m_shadowPipeline = builder.GetPipeline();
+
+    return true;
+}
+
+/**
  * @brief Initializes the Vulkan render pass.
  * @return Returns true if the initialization was successful. Returns false otherwise.
  */
 bool Application::InitRenderPass()
 {
-    // TODO: Research more about subpass dependencies
-
     // Setup color attachment for the framebuffer
     VkAttachmentDescription colorAttachment = {};
     colorAttachment.format = m_vkSwapchainImageFormat;
@@ -770,7 +1010,6 @@ bool Application::InitRenderPass()
     subpassDescription.pColorAttachments = &colorAttachmentReference;
     subpassDescription.pDepthStencilAttachment = &depthAttachmentReference;
 
-    // TODO: Research more about subpass dependencies to understand what the following lines do
     VkSubpassDependency subpassDependency = {};
     subpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     subpassDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -927,6 +1166,27 @@ bool Application::InitCommandBuffers()
  */
 bool Application::InitDescriptors()
 {
+    VkSamplerCreateInfo samplerInfo = {};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.mipLodBias = 0.0f;
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = 0.0f;
+    if (vkCreateSampler(VulkanContext::GetLogicalDevice(), &samplerInfo, nullptr, &m_shadowMapSampler) != VK_SUCCESS)
+    {
+        std::cerr << "[Application] Failed to create sampler for the shadow map!" << std::endl;
+        return false;
+    }
+
     VkDescriptorSetLayoutBinding cameraUBOBinding = {};
     cameraUBOBinding.binding = 0;
     cameraUBOBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -939,7 +1199,13 @@ bool Application::InitDescriptors()
     lightUBOBinding.descriptorCount = 1;
     lightUBOBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    std::array<VkDescriptorSetLayoutBinding, 2> bindings = { cameraUBOBinding, lightUBOBinding };
+    VkDescriptorSetLayoutBinding shadowMapBinding = {};
+    shadowMapBinding.binding = 2;
+    shadowMapBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    shadowMapBinding.descriptorCount = 1;
+    shadowMapBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    std::array<VkDescriptorSetLayoutBinding, 3> bindings = { cameraUBOBinding, lightUBOBinding, shadowMapBinding };
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -967,14 +1233,16 @@ bool Application::InitDescriptors()
         }
     }
 
-    VkDescriptorPoolSize poolSize = {};
-    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = m_maxFramesInFlight;
+    std::array<VkDescriptorPoolSize, 2> poolSizes = {};
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = m_maxFramesInFlight;
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[1].descriptorCount = m_maxFramesInFlight;
 
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
     poolInfo.maxSets = m_maxFramesInFlight;
 
     if (vkCreateDescriptorPool(VulkanContext::GetLogicalDevice(), &poolInfo, nullptr, &m_vkDescriptorPool) != VK_SUCCESS)
@@ -1007,11 +1275,6 @@ bool Application::InitDescriptors()
         cameraUBO.offset = 0;
         cameraUBO.range = sizeof(CameraData); // or VK_WHOLE_SIZE
 
-        VkDescriptorBufferInfo lightUBO = {};
-        lightUBO.buffer = m_frameDataList[i].lightDataUniformBuffer.GetHandle();
-        lightUBO.offset = 0;
-        lightUBO.range = sizeof(LightData);
-
         VkWriteDescriptorSet cameraUBOWrite = {};
         cameraUBOWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         cameraUBOWrite.dstSet = m_frameDataList[i].descriptorSet;
@@ -1020,6 +1283,11 @@ bool Application::InitDescriptors()
         cameraUBOWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         cameraUBOWrite.descriptorCount = 1;
         cameraUBOWrite.pBufferInfo = &cameraUBO;
+
+        VkDescriptorBufferInfo lightUBO = {};
+        lightUBO.buffer = m_frameDataList[i].lightDataUniformBuffer.GetHandle();
+        lightUBO.offset = 0;
+        lightUBO.range = sizeof(LightData);
 
         VkWriteDescriptorSet lightUBOWrite = {};
         lightUBOWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1030,7 +1298,21 @@ bool Application::InitDescriptors()
         lightUBOWrite.descriptorCount = 1;
         lightUBOWrite.pBufferInfo = &lightUBO;
 
-        std::array<VkWriteDescriptorSet, 2> writes = { cameraUBOWrite, lightUBOWrite };
+        VkDescriptorImageInfo shadowMap = {};
+        shadowMap.sampler = m_shadowMapSampler;
+        shadowMap.imageView = m_frameDataList[i].shadowMapImageView.GetHandle();
+        shadowMap.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
+        VkWriteDescriptorSet shadowMapWrite = {};
+        shadowMapWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        shadowMapWrite.dstSet = m_frameDataList[i].descriptorSet;
+        shadowMapWrite.dstBinding = 2;
+        shadowMapWrite.dstArrayElement = 0;
+        shadowMapWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        shadowMapWrite.descriptorCount = 1;
+        shadowMapWrite.pImageInfo = &shadowMap;
+
+        std::array<VkWriteDescriptorSet, 3> writes = { cameraUBOWrite, lightUBOWrite, shadowMapWrite };
         vkUpdateDescriptorSets(VulkanContext::GetLogicalDevice(), writes.size(), writes.data(), 0, nullptr);
     }
 
@@ -1064,7 +1346,7 @@ bool Application::InitGraphicsPipeline()
     builder
         .SetPolygonMode(VK_POLYGON_MODE_FILL)
         .SetCullMode(VK_CULL_MODE_BACK_BIT)
-        .SetFrontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE);
+        .SetFrontFace(VK_FRONT_FACE_CLOCKWISE);
 
     // --- Multisampling ---
 

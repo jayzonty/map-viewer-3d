@@ -180,7 +180,9 @@ glm::mat4 Camera::GetViewMatrix() const
 glm::mat4 Camera::GetProjectionMatrix() const
 {
 	// TODO: Make the near and far values adjustable
-	return glm::perspectiveLH_ZO(glm::radians(m_fov), m_aspectRatio, 0.1f, 100.0f);
+	glm::mat4 ret = glm::perspectiveRH_ZO(glm::radians(m_fov), m_aspectRatio, 0.1f, 100.0f);
+	ret[1][1] *= -1.0f;
+	return ret;
 }
 
 /**

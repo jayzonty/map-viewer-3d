@@ -8,9 +8,11 @@ layout (location = 3) in vec3 normal;
 layout (location = 0) out vec3 fragPosition;
 layout (location = 1) out vec3 fragColor;
 layout (location = 2) out vec3 fragNormal;
+layout (location = 3) out vec4 fragLightSpacePosition;
 
 layout (push_constant) uniform PushConstants
 {
+    mat4 lightProjView;
     mat4 projView;
 } pushConstants;
 
@@ -21,4 +23,5 @@ void main()
     fragPosition = position;
     fragColor = color;
     fragNormal = normal;
+    fragLightSpacePosition = pushConstants.lightProjView * vec4(position, 1.0);
 }
