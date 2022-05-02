@@ -5,7 +5,8 @@
 #include "Core/Util/FileUtils.hpp"
 #include "Map/BuildingData.hpp"
 #include "Map/HighwayData.hpp"
-#include "Map/MapData.hpp"
+#include "Map/ChunkData.hpp"
+#include "Map/OSMChunkDataSource.hpp"
 #include "Util/GeometryUtils.hpp"
 #include "Vertex.hpp"
 #include "Core/Vulkan/VulkanGraphicsPipelineBuilder.hpp"
@@ -61,9 +62,10 @@ void Application::Run()
         return;
     }
 
-    MapData map;
-    map.Parse("Resources/map.osm"); // TODO: Stream data, or have a way to select map data file
-    const std::vector<BuildingData>* buildings = map.GetBuildings();
+    ChunkData chunk;
+    OSMChunkDataSource dataSource;
+    dataSource.Retrieve({139.75000f, 35.60000f}, {139.80000f, 35.65000f}, chunk);
+    const std::vector<BuildingData> &buildings = chunk.buildings;
 
     glm::vec3 sideColor(0.65f);
     glm::vec3 topColor(0.9f);
@@ -72,19 +74,19 @@ void Application::Run()
     std::vector<glm::dvec2> pointsInTriangulation;
 
     std::vector<Vertex> vertices;
-    for (size_t i = 0; i < buildings->size(); i++)
+    for (size_t i = 0; i < buildings.size(); i++)
     {
-        float buildingHeight = buildings->at(i).heightInMeters;
-        float buildingYOffset = buildings->at(i).heightFromGround;
+        float buildingHeight = buildings.at(i).heightInMeters;
+        float buildingYOffset = buildings.at(i).heightFromGround;
 
         // Top
-        GeometryUtils::PolygonTriangulation(buildings->at(i).outline, pointsInTriangulation);
+        GeometryUtils::PolygonTriangulation(buildings.at(i).outline, pointsInTriangulation);
         for (size_t j = 0; j < pointsInTriangulation.size(); j++)
         {
             vertices.emplace_back();
-            vertices.back().position.x = buildings->at(i).position.x + pointsInTriangulation[j].x;
+            vertices.back().position.x = buildings.at(i).position.x + pointsInTriangulation[j].x;
             vertices.back().position.y = buildingYOffset + buildingHeight;
-            vertices.back().position.z = buildings->at(i).position.y + pointsInTriangulation[j].y;
+            vertices.back().position.z = buildings.at(i).position.y + pointsInTriangulation[j].y;
             vertices.back().color = topColor;
             vertices.back().normal = { 0.0f, 1.0f, 0.0f };
         }
@@ -92,18 +94,18 @@ void Application::Run()
         for (size_t j = pointsInTriangulation.size(); j > 0; j--)
         {
             vertices.emplace_back();
-            vertices.back().position.x = buildings->at(i).position.x + pointsInTriangulation[j - 1].x;
+            vertices.back().position.x = buildings.at(i).position.x + pointsInTriangulation[j - 1].x;
             vertices.back().position.y = buildingYOffset;
-            vertices.back().position.z = buildings->at(i).position.y + pointsInTriangulation[j - 1].y;
+            vertices.back().position.z = buildings.at(i).position.y + pointsInTriangulation[j - 1].y;
             vertices.back().color = bottomColor;
             vertices.back().normal = { 0.0f, -1.0f, 0.0f };
         }
 
         // Extrude
-        for (size_t j = 0; j < buildings->at(i).outline.size(); j++)
+        for (size_t j = 0; j < buildings.at(i).outline.size(); j++)
         {
-            const glm::vec2 &p0 = buildings->at(i).position + buildings->at(i).outline[j];
-            const glm::vec2 &p1 = buildings->at(i).position + buildings->at(i).outline[(j + 1) % buildings->at(i).outline.size()];
+            const glm::vec2 &p0 = buildings.at(i).position + buildings.at(i).outline[j];
+            const glm::vec2 &p1 = buildings.at(i).position + buildings.at(i).outline[(j + 1) % buildings.at(i).outline.size()];
 
             vertices.emplace_back();
             vertices.back().position = { p0.x, buildingYOffset, p0.y };
@@ -141,7 +143,7 @@ void Application::Run()
 
     // Road vertices
     const glm::vec3 roadColor(0.0f, 0.5f, 0.5f);
-    const std::vector<HighwayData> &highways = map.GetHighways();
+    const std::vector<HighwayData> &highways = chunk.highways;
     for (size_t i = 0; i < highways.size(); i++)
     {
         double roadHeight = 0.0;
