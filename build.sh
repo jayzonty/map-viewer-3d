@@ -19,4 +19,4 @@ glslangValidator -S vert -e main -o Resources/Shaders/basic_vert.spv -V Resource
 glslangValidator -S frag -e main -o Resources/Shaders/basic_frag.spv -V Resources/Shaders/basic_frag.glsl
 glslangValidator -S vert -e main -o Resources/Shaders/shadow_vert.spv -V Resources/Shaders/shadow_vert.glsl
 glslangValidator -S frag -e main -o Resources/Shaders/shadow_frag.spv -V Resources/Shaders/shadow_frag.glsl
-cp -r Resources build/Resources
+cp -r Resources build/
