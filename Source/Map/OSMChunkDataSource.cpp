@@ -71,7 +71,7 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
     boundsMin.y = boundsElement->DoubleAttribute("minlat");
     boundsMax.x = boundsElement->DoubleAttribute("maxlon");
     boundsMax.y = boundsElement->DoubleAttribute("maxlat");
-    outChunkData.position = GeometryUtils::LonLatToXY((boundsMin + boundsMax) / 2.0);
+    outChunkData.center = GeometryUtils::LonLatToXY((boundsMin + boundsMax) / 2.0);
 
     std::map<int32_t, glm::dvec2> nodeIDToLonLat;
 
@@ -116,7 +116,6 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
     {
         for (size_t i = 0; i < outChunkData.buildings.size(); i++)
         {
-            outChunkData.buildings[i].positionInChunk -= outChunkData.position;
             for (size_t j = 0; j < outChunkData.buildings[i].outline.size(); j++)
             {
                 glm::dvec2 &a = outChunkData.buildings[i].outline[j];
@@ -140,11 +139,6 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
                 std::cout << "Polygon is still not CCW!" << std::endl;
             }
         }
-    }
-
-    for (size_t i = 0; i < outChunkData.highways.size(); i++)
-    {
-        outChunkData.highways[i].position -= outChunkData.position;
     }
 
     return true;
@@ -181,22 +175,6 @@ bool OSMChunkDataSource::RetrieveBuildingData(const tinyxml2::XMLElement *elemen
     if (outBuildingData.outline[0] == outBuildingData.outline.back())
     {
         outBuildingData.outline.pop_back();
-    }
-
-    glm::dvec2 min = outBuildingData.outline[0];
-    glm::dvec2 max = min;
-    for (size_t i = 1; i < outBuildingData.outline.size(); ++i)
-    {
-        min.x = glm::min(min.x, outBuildingData.outline[i].x);
-        min.y = glm::min(min.y, outBuildingData.outline[i].y);
-        max.x = glm::max(max.x, outBuildingData.outline[i].x);
-        max.y = glm::max(max.y, outBuildingData.outline[i].y);
-    }
-
-    outBuildingData.positionInChunk = (min + max) / 2.0;
-    for (size_t i = 0; i < outBuildingData.outline.size(); ++i)
-    {
-        outBuildingData.outline[i] -= outBuildingData.positionInChunk;
     }
 
     const tinyxml2::XMLAttribute *heightAttrib = GetChildTagValue(element, BUILDING_HEIGHT_TAG_KEY_STR);
@@ -260,6 +238,11 @@ bool OSMChunkDataSource::RetrieveHighwayData(const tinyxml2::XMLElement *element
         nodeRefElement = nodeRefElement->NextSiblingElement(WAY_NODE_ELEMENT_STR);
     }
 
+    if (outHighwayData.points.size() == 0)
+    {
+        return false;
+    }
+
     double numLanes = 1.0;
     double width = RESIDENTIAL_HIGHWAY_LANE_WIDTH_METERS;
     const tinyxml2::XMLAttribute *highwayTypeAttrib = GetChildTagValue(element, HIGHWAY_TAG_KEY_STR);
@@ -276,28 +259,6 @@ bool OSMChunkDataSource::RetrieveHighwayData(const tinyxml2::XMLElement *element
         numLanes = lanesAttrib->DoubleValue();
     }
     outHighwayData.roadWidth = width * numLanes;
-
-    if (outHighwayData.points.size() == 0)
-    {
-        return false;
-    }
-
-    glm::dvec2 min = outHighwayData.points[0];
-    glm::dvec2 max = min;
-    for (size_t i = 1; i < outHighwayData.points.size(); i++)
-    {
-        min.x = glm::min(min.x, outHighwayData.points[i].x);
-        min.y = glm::min(min.y, outHighwayData.points[i].y);
-        max.x = glm::max(max.x, outHighwayData.points[i].x);
-        max.y = glm::max(max.y, outHighwayData.points[i].y);
-    }
-
-    glm::dvec2 center = (min + max) / 2.0;
-    for (size_t i = 0; i < outHighwayData.points.size(); i++)
-    {
-        outHighwayData.points[i] -= center;
-    }
-    outHighwayData.position = center;
 
     return true;
 }

@@ -84,9 +84,9 @@ void Application::Run()
         for (size_t j = 0; j < pointsInTriangulation.size(); j++)
         {
             vertices.emplace_back();
-            vertices.back().position.x = (buildings.at(i).positionInChunk.x + pointsInTriangulation[j].x) * SCALE;
+            vertices.back().position.x = (pointsInTriangulation[j].x - chunk.center.x) * SCALE;
             vertices.back().position.y = buildingYOffset + buildingHeight;
-            vertices.back().position.z = (buildings.at(i).positionInChunk.y + pointsInTriangulation[j].y) * SCALE;
+            vertices.back().position.z = (pointsInTriangulation[j].y - chunk.center.y) * SCALE;
             vertices.back().color = topColor;
             vertices.back().normal = { 0.0f, 1.0f, 0.0f };
         }
@@ -94,9 +94,9 @@ void Application::Run()
         for (size_t j = pointsInTriangulation.size(); j > 0; j--)
         {
             vertices.emplace_back();
-            vertices.back().position.x = (buildings.at(i).positionInChunk.x + pointsInTriangulation[j - 1].x) * SCALE;
+            vertices.back().position.x = (pointsInTriangulation[j - 1].x - chunk.center.x) * SCALE;
             vertices.back().position.y = buildingYOffset;
-            vertices.back().position.z = (buildings.at(i).positionInChunk.y + pointsInTriangulation[j - 1].y) * SCALE;
+            vertices.back().position.z = (pointsInTriangulation[j - 1].y - chunk.center.y) * SCALE;
             vertices.back().color = bottomColor;
             vertices.back().normal = { 0.0f, -1.0f, 0.0f };
         }
@@ -104,8 +104,8 @@ void Application::Run()
         // Extrude
         for (size_t j = 0; j < buildings.at(i).outline.size(); j++)
         {
-            const glm::vec2 &p0 = (buildings.at(i).positionInChunk + buildings.at(i).outline[j]) * SCALE;
-            const glm::vec2 &p1 = (buildings.at(i).positionInChunk + buildings.at(i).outline[(j + 1) % buildings.at(i).outline.size()]) * SCALE;
+            const glm::vec2 &p0 = (buildings.at(i).outline[j] - chunk.center) * SCALE;
+            const glm::vec2 &p1 = (buildings.at(i).outline[(j + 1) % buildings.at(i).outline.size()] - chunk.center) * SCALE;
 
             vertices.emplace_back();
             vertices.back().position = { p0.x, buildingYOffset, p0.y };
@@ -150,8 +150,8 @@ void Application::Run()
         double width = highways.at(i).roadWidth * SCALE;
         for (size_t j = 1; j < highways.at(i).points.size(); j++)
         {
-            const glm::dvec2 &a = (highways.at(i).position + highways.at(i).points[j - 1]) * SCALE;
-            const glm::dvec2 &b = (highways.at(i).position + highways.at(i).points[j]) * SCALE;
+            const glm::dvec2 &a = (highways.at(i).points[j - 1] - chunk.center) * SCALE;
+            const glm::dvec2 &b = (highways.at(i).points[j] - chunk.center) * SCALE;
 
             glm::dvec2 dir = b - a;
             glm::dvec2 normal(-dir.y, dir.x);

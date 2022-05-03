@@ -10,10 +10,10 @@
  */
 struct HighwayData
 {
-    uint32_t numLanes = 1;
-    double roadWidth = 2.0;
-    glm::dvec2 position;
-    std::vector<glm::dvec2> points;
+    uint32_t numLanes = 1;              // Number of lanes in the highway
+    double roadWidth = 2.0;             // Road width (meters)
+
+    std::vector<glm::dvec2> points;     // List of points in the highway path (xy, world-space)
 };
 
 #endif // HIGHWAY_DATA_INCLUDED
