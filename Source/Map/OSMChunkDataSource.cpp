@@ -63,6 +63,16 @@ bool OSMChunkDataSource::Retrieve(const glm::vec2 &min, const glm::vec2 &max, Ch
  */
 bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, ChunkData &outChunkData)
 {
+    const tinyxml2::XMLElement *rootElement = xml.FirstChildElement(OSM_ELEMENT_STR);
+
+    glm::dvec2 boundsMin, boundsMax;
+    const tinyxml2::XMLElement *boundsElement = rootElement->FirstChildElement("bounds");
+    boundsMin.x = boundsElement->DoubleAttribute("minlon");
+    boundsMin.y = boundsElement->DoubleAttribute("minlat");
+    boundsMax.x = boundsElement->DoubleAttribute("maxlon");
+    boundsMax.y = boundsElement->DoubleAttribute("maxlat");
+    outChunkData.position = GeometryUtils::LonLatToXY((boundsMin + boundsMax) / 2.0) * SCALE;
+
     std::map<int32_t, glm::dvec2> nodeIDToLonLat;
 
     const tinyxml2::XMLElement *nodeElement = xml.FirstChildElement(OSM_ELEMENT_STR)->FirstChildElement(NODE_ELEMENT_STR);
@@ -85,153 +95,17 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
             || HasChildTag(wayElement, BUILDING_PART_TAG_KEY_STR))
         {
             outChunkData.buildings.emplace_back();
-
-            double minX, maxX, minY, maxY;
-
-            const tinyxml2::XMLElement *nodeRefElement = wayElement->FirstChildElement(WAY_NODE_ELEMENT_STR);
-            while (nodeRefElement != nullptr)
-            {
-                int32_t nodeId = nodeRefElement->IntAttribute(WAY_NODE_REF_ATTRIBUTE_STR);
-                if (nodeIDToLonLat.find(nodeId) != nodeIDToLonLat.end())
-                {
-                    double lon = nodeIDToLonLat[nodeId].x;
-                    double lat = nodeIDToLonLat[nodeId].y;
-                    glm::dvec2 xy = GeometryUtils::LonLatToXY(lon, lat) * SCALE;
-
-                    if (outChunkData.buildings.back().outline.size() == 0)
-                    {
-                        minX = maxX = xy.x;
-                        minY = maxY = xy.y;
-                    }
-                    else
-                    {
-                        minX = glm::min(xy.x, minX);
-                        maxX = glm::max(xy.x, maxX);
-                        minY = glm::min(xy.y, minY);  
-                        maxY = glm::max(xy.y, maxY);
-                    }
-
-                    outChunkData.buildings.back().outline.push_back(xy);
-                }
-                nodeRefElement = nodeRefElement->NextSiblingElement(WAY_NODE_ELEMENT_STR);
-            }
-
-            if (outChunkData.buildings.back().outline.size() == 0)
+            if (!RetrieveBuildingData(wayElement, nodeIDToLonLat, outChunkData.buildings.back()))
             {
                 outChunkData.buildings.pop_back();
-            }
-            else
-            {
-                if (outChunkData.buildings.back().outline[0] == outChunkData.buildings.back().outline.back())
-                {
-                    outChunkData.buildings.back().outline.pop_back();
-                }
-
-                double centerX = (minX + maxX) / 2.0;
-                double centerY = (minY + maxY) / 2.0;
-                for (size_t i = 0; i < outChunkData.buildings.back().outline.size(); i++)
-                {
-                    outChunkData.buildings.back().outline[i].x -= centerX;
-                    outChunkData.buildings.back().outline[i].y -= centerY;
-                }
-
-                outChunkData.buildings.back().position.x = centerX;
-                outChunkData.buildings.back().position.y = centerY;
-
-                const tinyxml2::XMLAttribute *heightAttrib = GetChildTagValue(wayElement, BUILDING_HEIGHT_TAG_KEY_STR);
-                const tinyxml2::XMLAttribute *minHeightAttrib = GetChildTagValue(wayElement, BUILDING_MIN_HEIGHT_TAG_KEY_STR);
-                const tinyxml2::XMLAttribute *buildingLevelsAttrib = GetChildTagValue(wayElement, BUILDING_LEVELS_TAG_KEY_STR);
-                const tinyxml2::XMLAttribute *buildingMinLevelsAttrib = GetChildTagValue(wayElement, BUILDING_MIN_LEVELS_TAG_KEY_STR);
-                // height has priority over building:levels
-                if (heightAttrib != nullptr)
-                {
-                    outChunkData.buildings.back().heightInMeters = heightAttrib->DoubleValue();
-                }
-                else if (buildingLevelsAttrib != nullptr)
-                {
-                    outChunkData.buildings.back().heightInMeters = buildingLevelsAttrib->DoubleValue() * METERS_PER_LEVEL;
-                }
-                // min_height has priority over building:min_levels
-                if (minHeightAttrib != nullptr)
-                {
-                    outChunkData.buildings.back().heightFromGround = minHeightAttrib->DoubleValue();
-                    if (heightAttrib != nullptr)
-                    {
-                        outChunkData.buildings.back().heightInMeters -= minHeightAttrib->DoubleValue();
-                    }
-                }
-                else if (buildingMinLevelsAttrib != nullptr)
-                {
-                    outChunkData.buildings.back().heightFromGround = buildingMinLevelsAttrib->DoubleValue() * METERS_PER_LEVEL;
-                    if (heightAttrib != nullptr)
-                    {
-                        outChunkData.buildings.back().heightInMeters = glm::max(heightAttrib->DoubleValue() - outChunkData.buildings.back().heightFromGround, METERS_PER_LEVEL);
-                    }
-                    else if (buildingLevelsAttrib != nullptr)
-                    {
-                        outChunkData.buildings.back().heightInMeters -= outChunkData.buildings.back().heightFromGround;
-                    }
-                }
-                outChunkData.buildings.back().heightInMeters *= SCALE;
-                outChunkData.buildings.back().heightFromGround *= SCALE;
             }
         }
         else if (HasChildTag(wayElement, HIGHWAY_TAG_KEY_STR))
         {
             outChunkData.highways.emplace_back();
-            const tinyxml2::XMLElement *nodeRefElement = wayElement->FirstChildElement(WAY_NODE_ELEMENT_STR);
-            while (nodeRefElement != nullptr)
-            {
-                int32_t nodeId = nodeRefElement->IntAttribute(WAY_NODE_REF_ATTRIBUTE_STR);
-                if (nodeIDToLonLat.find(nodeId) != nodeIDToLonLat.end())
-                {
-                    double lon = nodeIDToLonLat[nodeId].x;
-                    double lat = nodeIDToLonLat[nodeId].y;
-                    glm::dvec2 xy = GeometryUtils::LonLatToXY(lon, lat) * SCALE;
-                    outChunkData.highways.back().points.push_back(xy);
-                }
-                nodeRefElement = nodeRefElement->NextSiblingElement(WAY_NODE_ELEMENT_STR);
-            }
-
-            double numLanes = 1.0;
-            double width = RESIDENTIAL_HIGHWAY_LANE_WIDTH_METERS;
-            const tinyxml2::XMLAttribute *highwayTypeAttrib = GetChildTagValue(wayElement, HIGHWAY_TAG_KEY_STR);
-            if (highwayTypeAttrib != nullptr)
-            {
-                if (strcmp(highwayTypeAttrib->Value(), "primary") == 0)
-                {
-                    width = PRIMARY_HIGHWAY_LANE_WIDTH_METERS;
-                }
-            }
-            const tinyxml2::XMLAttribute *lanesAttrib = GetChildTagValue(wayElement, HIGHWAY_LANES_TAG_KEY_STR);
-            if (lanesAttrib != nullptr)
-            {
-                numLanes = lanesAttrib->DoubleValue();
-            }
-            outChunkData.highways.back().roadWidth = width * numLanes * SCALE;
-
-            if (outChunkData.highways.back().points.size() == 0)
+            if (!RetrieveHighwayData(wayElement, nodeIDToLonLat, outChunkData.highways.back()))
             {
                 outChunkData.highways.pop_back();
-            }
-            else
-            {
-                glm::dvec2 min = outChunkData.highways.back().points[0];
-                glm::dvec2 max = min;
-                for (size_t i = 1; i < outChunkData.highways.back().points.size(); i++)
-                {
-                    min.x = glm::min(min.x, outChunkData.highways.back().points[i].x);
-                    min.y = glm::min(min.y, outChunkData.highways.back().points[i].y);
-                    max.x = glm::max(max.x, outChunkData.highways.back().points[i].x);
-                    max.y = glm::max(max.y, outChunkData.highways.back().points[i].y);
-                }
-
-                glm::dvec2 center = (min + max) / 2.0;
-                for (size_t i = 0; i < outChunkData.highways.back().points.size(); i++)
-                {
-                    outChunkData.highways.back().points[i] -= center;
-                }
-                outChunkData.highways.back().position = center;
             }
         }
 
@@ -240,23 +114,9 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
 
     if (outChunkData.buildings.size() > 0)
     {
-        double minX = outChunkData.buildings[0].position.x;
-        double maxX = minX;
-        double minY = outChunkData.buildings[0].position.y;
-        double maxY = minY;
-        for (size_t i = 1; i < outChunkData.buildings.size(); i++)
-        {
-            minX = glm::min(minX, outChunkData.buildings[i].position.x);
-            maxX = glm::max(maxX, outChunkData.buildings[i].position.x);
-            minY = glm::min(minY, outChunkData.buildings[i].position.y);
-            maxY = glm::max(maxY, outChunkData.buildings[i].position.y);
-        }
-
-        outChunkData.position.x = (minX + maxX) * 0.5f;
-        outChunkData.position.y = (minY + maxY) * 0.5f;
         for (size_t i = 0; i < outChunkData.buildings.size(); i++)
         {
-            outChunkData.buildings[i].position -= outChunkData.position;
+            outChunkData.buildings[i].positionInChunk -= outChunkData.position;
             for (size_t j = 0; j < outChunkData.buildings[i].outline.size(); j++)
             {
                 glm::dvec2 &a = outChunkData.buildings[i].outline[j];
@@ -286,6 +146,160 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
     {
         outChunkData.highways[i].position -= outChunkData.position;
     }
+
+    return true;
+}
+
+/**
+ * @brief Retrieves building data from the given xml element
+ * @param[in] element XML element object
+ * @param[in] nodeIDToLonLat Map containing the mapping between a node ID and its lon/lat position
+ * @param[out] outBuildingData BuildingData object that will contain the retrieved building data
+ * @return True if the operation was successful.
+ */
+bool OSMChunkDataSource::RetrieveBuildingData(const tinyxml2::XMLElement *element, const std::map<int32_t, glm::dvec2> &nodeIDToLonLat, BuildingData &outBuildingData)
+{
+    const tinyxml2::XMLElement *nodeRefElement = element->FirstChildElement(WAY_NODE_ELEMENT_STR);
+    while (nodeRefElement != nullptr)
+    {
+        int32_t nodeId = nodeRefElement->IntAttribute(WAY_NODE_REF_ATTRIBUTE_STR);
+        if (nodeIDToLonLat.find(nodeId) != nodeIDToLonLat.end())
+        {
+            double lon = nodeIDToLonLat.at(nodeId).x;
+            double lat = nodeIDToLonLat.at(nodeId).y;
+            glm::dvec2 xy = GeometryUtils::LonLatToXY(lon, lat) * SCALE;
+            outBuildingData.outline.push_back(xy);
+        }
+        nodeRefElement = nodeRefElement->NextSiblingElement(WAY_NODE_ELEMENT_STR);
+    }
+
+    if (outBuildingData.outline.size() == 0)
+    {
+        return false;
+    }
+
+    if (outBuildingData.outline[0] == outBuildingData.outline.back())
+    {
+        outBuildingData.outline.pop_back();
+    }
+
+    glm::dvec2 min = outBuildingData.outline[0];
+    glm::dvec2 max = min;
+    for (size_t i = 1; i < outBuildingData.outline.size(); ++i)
+    {
+        min.x = glm::min(min.x, outBuildingData.outline[i].x);
+        min.y = glm::min(min.y, outBuildingData.outline[i].y);
+        max.x = glm::max(max.x, outBuildingData.outline[i].x);
+        max.y = glm::max(max.y, outBuildingData.outline[i].y);
+    }
+
+    outBuildingData.positionInChunk = (min + max) / 2.0;
+    for (size_t i = 0; i < outBuildingData.outline.size(); ++i)
+    {
+        outBuildingData.outline[i] -= outBuildingData.positionInChunk;
+    }
+
+    const tinyxml2::XMLAttribute *heightAttrib = GetChildTagValue(element, BUILDING_HEIGHT_TAG_KEY_STR);
+    const tinyxml2::XMLAttribute *minHeightAttrib = GetChildTagValue(element, BUILDING_MIN_HEIGHT_TAG_KEY_STR);
+    const tinyxml2::XMLAttribute *buildingLevelsAttrib = GetChildTagValue(element, BUILDING_LEVELS_TAG_KEY_STR);
+    const tinyxml2::XMLAttribute *buildingMinLevelsAttrib = GetChildTagValue(element, BUILDING_MIN_LEVELS_TAG_KEY_STR);
+    // height has priority over building:levels
+    if (heightAttrib != nullptr)
+    {
+        outBuildingData.heightInMeters = heightAttrib->DoubleValue();
+    }
+    else if (buildingLevelsAttrib != nullptr)
+    {
+        outBuildingData.heightInMeters = buildingLevelsAttrib->DoubleValue() * METERS_PER_LEVEL;
+    }
+    // min_height has priority over building:min_levels
+    if (minHeightAttrib != nullptr)
+    {
+        outBuildingData.heightFromGround = minHeightAttrib->DoubleValue();
+        if (heightAttrib != nullptr)
+        {
+            outBuildingData.heightInMeters -= minHeightAttrib->DoubleValue();
+        }
+    }
+    else if (buildingMinLevelsAttrib != nullptr)
+    {
+        outBuildingData.heightFromGround = buildingMinLevelsAttrib->DoubleValue() * METERS_PER_LEVEL;
+        if (heightAttrib != nullptr)
+        {
+            outBuildingData.heightInMeters = glm::max(heightAttrib->DoubleValue() - outBuildingData.heightFromGround, METERS_PER_LEVEL);
+        }
+        else if (buildingLevelsAttrib != nullptr)
+        {
+            outBuildingData.heightInMeters -= outBuildingData.heightFromGround;
+        }
+    }
+    outBuildingData.heightInMeters *= SCALE;
+    outBuildingData.heightFromGround *= SCALE;
+
+    return true;
+}
+
+/**
+ * @brief Retrieves highway data from the given xml element
+ * @param[in] element XML element object
+ * @param[in] nodeIDToLonLat Map containing the mapping between a node ID and its lon/lat position
+ * @param[out] outHighwayData HighwayData object that will contain the retrieved highway data
+ * @return True if the operation was successful.
+ */
+bool OSMChunkDataSource::RetrieveHighwayData(const tinyxml2::XMLElement *element, const std::map<int32_t, glm::dvec2> &nodeIDToLonLat, HighwayData &outHighwayData)
+{
+    const tinyxml2::XMLElement *nodeRefElement = element->FirstChildElement(WAY_NODE_ELEMENT_STR);
+    while (nodeRefElement != nullptr)
+    {
+        int32_t nodeId = nodeRefElement->IntAttribute(WAY_NODE_REF_ATTRIBUTE_STR);
+        if (nodeIDToLonLat.find(nodeId) != nodeIDToLonLat.end())
+        {
+            double lon = nodeIDToLonLat.at(nodeId).x;
+            double lat = nodeIDToLonLat.at(nodeId).y;
+            glm::dvec2 xy = GeometryUtils::LonLatToXY(lon, lat) * SCALE;
+            outHighwayData.points.push_back(xy);
+        }
+        nodeRefElement = nodeRefElement->NextSiblingElement(WAY_NODE_ELEMENT_STR);
+    }
+
+    double numLanes = 1.0;
+    double width = RESIDENTIAL_HIGHWAY_LANE_WIDTH_METERS;
+    const tinyxml2::XMLAttribute *highwayTypeAttrib = GetChildTagValue(element, HIGHWAY_TAG_KEY_STR);
+    if (highwayTypeAttrib != nullptr)
+    {
+        if (strcmp(highwayTypeAttrib->Value(), "primary") == 0)
+        {
+            width = PRIMARY_HIGHWAY_LANE_WIDTH_METERS;
+        }
+    }
+    const tinyxml2::XMLAttribute *lanesAttrib = GetChildTagValue(element, HIGHWAY_LANES_TAG_KEY_STR);
+    if (lanesAttrib != nullptr)
+    {
+        numLanes = lanesAttrib->DoubleValue();
+    }
+    outHighwayData.roadWidth = width * numLanes * SCALE;
+
+    if (outHighwayData.points.size() == 0)
+    {
+        return false;
+    }
+
+    glm::dvec2 min = outHighwayData.points[0];
+    glm::dvec2 max = min;
+    for (size_t i = 1; i < outHighwayData.points.size(); i++)
+    {
+        min.x = glm::min(min.x, outHighwayData.points[i].x);
+        min.y = glm::min(min.y, outHighwayData.points[i].y);
+        max.x = glm::max(max.x, outHighwayData.points[i].x);
+        max.y = glm::max(max.y, outHighwayData.points[i].y);
+    }
+
+    glm::dvec2 center = (min + max) / 2.0;
+    for (size_t i = 0; i < outHighwayData.points.size(); i++)
+    {
+        outHighwayData.points[i] -= center;
+    }
+    outHighwayData.position = center;
 
     return true;
 }

@@ -84,9 +84,9 @@ void Application::Run()
         for (size_t j = 0; j < pointsInTriangulation.size(); j++)
         {
             vertices.emplace_back();
-            vertices.back().position.x = buildings.at(i).position.x + pointsInTriangulation[j].x;
+            vertices.back().position.x = buildings.at(i).positionInChunk.x + pointsInTriangulation[j].x;
             vertices.back().position.y = buildingYOffset + buildingHeight;
-            vertices.back().position.z = buildings.at(i).position.y + pointsInTriangulation[j].y;
+            vertices.back().position.z = buildings.at(i).positionInChunk.y + pointsInTriangulation[j].y;
             vertices.back().color = topColor;
             vertices.back().normal = { 0.0f, 1.0f, 0.0f };
         }
@@ -94,9 +94,9 @@ void Application::Run()
         for (size_t j = pointsInTriangulation.size(); j > 0; j--)
         {
             vertices.emplace_back();
-            vertices.back().position.x = buildings.at(i).position.x + pointsInTriangulation[j - 1].x;
+            vertices.back().position.x = buildings.at(i).positionInChunk.x + pointsInTriangulation[j - 1].x;
             vertices.back().position.y = buildingYOffset;
-            vertices.back().position.z = buildings.at(i).position.y + pointsInTriangulation[j - 1].y;
+            vertices.back().position.z = buildings.at(i).positionInChunk.y + pointsInTriangulation[j - 1].y;
             vertices.back().color = bottomColor;
             vertices.back().normal = { 0.0f, -1.0f, 0.0f };
         }
@@ -104,8 +104,8 @@ void Application::Run()
         // Extrude
         for (size_t j = 0; j < buildings.at(i).outline.size(); j++)
         {
-            const glm::vec2 &p0 = buildings.at(i).position + buildings.at(i).outline[j];
-            const glm::vec2 &p1 = buildings.at(i).position + buildings.at(i).outline[(j + 1) % buildings.at(i).outline.size()];
+            const glm::vec2 &p0 = buildings.at(i).positionInChunk + buildings.at(i).outline[j];
+            const glm::vec2 &p1 = buildings.at(i).positionInChunk + buildings.at(i).outline[(j + 1) % buildings.at(i).outline.size()];
 
             vertices.emplace_back();
             vertices.back().position = { p0.x, buildingYOffset, p0.y };

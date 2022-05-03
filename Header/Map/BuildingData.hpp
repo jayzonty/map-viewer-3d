@@ -7,7 +7,8 @@
 
 struct BuildingData
 {
-    glm::dvec2 position;
+    glm::dvec2 positionInChunk;
+
     double heightInMeters = 6.0;
     double heightFromGround = 0.0;
     std::vector<glm::dvec2> outline;

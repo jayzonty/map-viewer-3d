@@ -1,11 +1,14 @@
 #ifndef OSM_CHUNK_DATA_SOURCE_HEADER
 #define OSM_CHUNK_DATA_SOURCE_HEADER
 
+#include "Map/BuildingData.hpp"
 #include "Map/ChunkDataSource.hpp"
 #include "Map/ChunkData.hpp"
-#include "tinyxml2.h"
 
 #include <glm/fwd.hpp>
+#include <tinyxml2.h>
+
+#include <map>
 
 /**
  * Source of chunk data from OSM
@@ -68,6 +71,24 @@ private:
      * @return True if the operation was successful.
      */
     bool RetrieveFromXML(const tinyxml2::XMLDocument &xml, ChunkData &outChunkData);
+
+    /**
+     * @brief Retrieves building data from the given xml element
+     * @param[in] element XML element object
+     * @param[in] nodeIDToLonLat Map containing the mapping between a node ID and its lon/lat position
+     * @param[out] outBuildingData BuildingData object that will contain the retrieved building data
+     * @return True if the operation was successful.
+     */
+    bool RetrieveBuildingData(const tinyxml2::XMLElement *element, const std::map<int32_t, glm::dvec2> &nodeIDToLonLat, BuildingData &outBuildingData);
+
+    /**
+     * @brief Retrieves highway data from the given xml element
+     * @param[in] element XML element object
+     * @param[in] nodeIDToLonLat Map containing the mapping between a node ID and its lon/lat position
+     * @param[out] outHighwayData HighwayData object that will contain the retrieved highway data
+     * @return True if the operation was successful.
+     */
+    bool RetrieveHighwayData(const tinyxml2::XMLElement *element, const std::map<int32_t, glm::dvec2> &nodeIDToLonLat, HighwayData &outHighwayData);
 
     bool HasChildTag(const tinyxml2::XMLElement *parent, const char *key);
     const tinyxml2::XMLAttribute* GetChildTagValue(const tinyxml2::XMLElement *parent, const char *key);
