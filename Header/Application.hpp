@@ -63,6 +63,8 @@ private:
         VulkanBuffer cameraDataUniformBuffer;   // Uniform buffer for the camera data
     };
 
+    const double SCALE = 0.05;                  // World scale
+
 private:
     bool m_isRunning;   // Flag indicating whether the application is running
 

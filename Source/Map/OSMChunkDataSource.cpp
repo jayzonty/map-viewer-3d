@@ -71,7 +71,7 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
     boundsMin.y = boundsElement->DoubleAttribute("minlat");
     boundsMax.x = boundsElement->DoubleAttribute("maxlon");
     boundsMax.y = boundsElement->DoubleAttribute("maxlat");
-    outChunkData.position = GeometryUtils::LonLatToXY((boundsMin + boundsMax) / 2.0) * SCALE;
+    outChunkData.position = GeometryUtils::LonLatToXY((boundsMin + boundsMax) / 2.0);
 
     std::map<int32_t, glm::dvec2> nodeIDToLonLat;
 
@@ -167,7 +167,7 @@ bool OSMChunkDataSource::RetrieveBuildingData(const tinyxml2::XMLElement *elemen
         {
             double lon = nodeIDToLonLat.at(nodeId).x;
             double lat = nodeIDToLonLat.at(nodeId).y;
-            glm::dvec2 xy = GeometryUtils::LonLatToXY(lon, lat) * SCALE;
+            glm::dvec2 xy = GeometryUtils::LonLatToXY(lon, lat);
             outBuildingData.outline.push_back(xy);
         }
         nodeRefElement = nodeRefElement->NextSiblingElement(WAY_NODE_ELEMENT_STR);
@@ -233,8 +233,6 @@ bool OSMChunkDataSource::RetrieveBuildingData(const tinyxml2::XMLElement *elemen
             outBuildingData.heightInMeters -= outBuildingData.heightFromGround;
         }
     }
-    outBuildingData.heightInMeters *= SCALE;
-    outBuildingData.heightFromGround *= SCALE;
 
     return true;
 }
@@ -256,7 +254,7 @@ bool OSMChunkDataSource::RetrieveHighwayData(const tinyxml2::XMLElement *element
         {
             double lon = nodeIDToLonLat.at(nodeId).x;
             double lat = nodeIDToLonLat.at(nodeId).y;
-            glm::dvec2 xy = GeometryUtils::LonLatToXY(lon, lat) * SCALE;
+            glm::dvec2 xy = GeometryUtils::LonLatToXY(lon, lat);
             outHighwayData.points.push_back(xy);
         }
         nodeRefElement = nodeRefElement->NextSiblingElement(WAY_NODE_ELEMENT_STR);
@@ -277,7 +275,7 @@ bool OSMChunkDataSource::RetrieveHighwayData(const tinyxml2::XMLElement *element
     {
         numLanes = lanesAttrib->DoubleValue();
     }
-    outHighwayData.roadWidth = width * numLanes * SCALE;
+    outHighwayData.roadWidth = width * numLanes;
 
     if (outHighwayData.points.size() == 0)
     {

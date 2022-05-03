@@ -38,7 +38,6 @@ private:
     const char *HIGHWAY_TAG_KEY_STR = "highway";
     const char *HIGHWAY_LANES_TAG_KEY_STR = "lanes";
 
-    const double SCALE = 0.05;
     const double METERS_PER_LEVEL = 3.0;
     const double PRIMARY_HIGHWAY_LANE_WIDTH_METERS = 2.0; 
     const double RESIDENTIAL_HIGHWAY_LANE_WIDTH_METERS = 1.0; 
