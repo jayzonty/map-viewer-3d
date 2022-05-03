@@ -20,6 +20,7 @@ extern void PolygonTriangulation(const std::vector<glm::dvec2> &polygonPoints, s
  * @return Vector containing the corresponding cartesian coordinates (in meters)
  */
 extern glm::dvec2 LonLatToXY(const glm::dvec2 &lonLat);
+
 /**
  * @brief Converts the provided longitude-latitude coordinates to cartesian coordinates
  * @param[in] lon Longitude
