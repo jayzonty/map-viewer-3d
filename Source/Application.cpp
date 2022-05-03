@@ -67,6 +67,8 @@ void Application::Run()
     dataSource.Retrieve({139.75000f, 35.60000f}, {139.80000f, 35.65000f}, chunk);
     const std::vector<BuildingData> &buildings = chunk.buildings;
 
+    glm::dvec2 chunkCenter = GeometryUtils::LonLatToXY(chunk.center);
+
     glm::vec3 sideColor(0.65f);
     glm::vec3 topColor(0.9f);
     glm::vec3 bottomColor(0.35f);
@@ -76,36 +78,69 @@ void Application::Run()
     std::vector<Vertex> vertices;
     for (size_t i = 0; i < buildings.size(); i++)
     {
-        float buildingHeight = buildings.at(i).heightInMeters * SCALE;
-        float buildingYOffset = buildings.at(i).heightFromGround * SCALE;
+        const BuildingData &building = buildings.at(i);
+
+        float buildingHeight = building.heightInMeters * SCALE;
+        float buildingYOffset = building.heightFromGround * SCALE;
+
+        std::vector<glm::dvec2> points;
+        for (size_t j = 0; j < building.outline.size(); ++j)
+        {
+            points.push_back(GeometryUtils::LonLatToXY(building.outline[j]));
+        }
+
+        for (size_t j = 0; j < points.size(); j++)
+        {
+            glm::dvec2 &a = points[j];
+            glm::dvec2 &b = points[(j + 1) % points.size()];
+            glm::dvec2 &c = points[(j + 2) % points.size()];
+
+            if (GeometryUtils::IsCollinear(a, b, c))
+            {
+                points.erase(points.begin() + ((j + 1) % points.size()));
+                --j;
+            }
+        }
+
+        if (!GeometryUtils::IsPolygonCCW(points))
+        {
+            std::reverse(points.begin(), points.end());
+        }
+        // Double check if polygon is now indeed CCW
+        if (!GeometryUtils::IsPolygonCCW(points))
+        {
+            std::cout << "Polygon is still not CCW!" << std::endl;
+        }
 
         // Top
-        GeometryUtils::PolygonTriangulation(buildings.at(i).outline, pointsInTriangulation);
+        GeometryUtils::PolygonTriangulation(points, pointsInTriangulation);
         for (size_t j = 0; j < pointsInTriangulation.size(); j++)
         {
+            glm::dvec2 point = (pointsInTriangulation[j] - chunkCenter) * SCALE;
             vertices.emplace_back();
-            vertices.back().position.x = (pointsInTriangulation[j].x - chunk.center.x) * SCALE;
+            vertices.back().position.x = point.x;
             vertices.back().position.y = buildingYOffset + buildingHeight;
-            vertices.back().position.z = (pointsInTriangulation[j].y - chunk.center.y) * SCALE;
+            vertices.back().position.z = point.y;
             vertices.back().color = topColor;
             vertices.back().normal = { 0.0f, 1.0f, 0.0f };
         }
         // Bottom
         for (size_t j = pointsInTriangulation.size(); j > 0; j--)
         {
+            glm::dvec2 point = (pointsInTriangulation[j - 1] - chunkCenter) * SCALE;
             vertices.emplace_back();
-            vertices.back().position.x = (pointsInTriangulation[j - 1].x - chunk.center.x) * SCALE;
+            vertices.back().position.x = point.x;
             vertices.back().position.y = buildingYOffset;
-            vertices.back().position.z = (pointsInTriangulation[j - 1].y - chunk.center.y) * SCALE;
+            vertices.back().position.z = point.y;
             vertices.back().color = bottomColor;
             vertices.back().normal = { 0.0f, -1.0f, 0.0f };
         }
 
         // Extrude
-        for (size_t j = 0; j < buildings.at(i).outline.size(); j++)
+        for (size_t j = 0; j < points.size(); j++)
         {
-            const glm::vec2 &p0 = (buildings.at(i).outline[j] - chunk.center) * SCALE;
-            const glm::vec2 &p1 = (buildings.at(i).outline[(j + 1) % buildings.at(i).outline.size()] - chunk.center) * SCALE;
+            const glm::vec2 &p0 = (points[j] - chunkCenter) * SCALE;
+            const glm::vec2 &p1 = (points[(j + 1) % points.size()] - chunkCenter) * SCALE;
 
             vertices.emplace_back();
             vertices.back().position = { p0.x, buildingYOffset, p0.y };
@@ -146,12 +181,14 @@ void Application::Run()
     const std::vector<HighwayData> &highways = chunk.highways;
     for (size_t i = 0; i < highways.size(); i++)
     {
+        const HighwayData &highway = highways.at(i);
+
         double roadHeight = 0.0;
-        double width = highways.at(i).roadWidth * SCALE;
-        for (size_t j = 1; j < highways.at(i).points.size(); j++)
+        double width = highway.roadWidth * SCALE;
+        for (size_t j = 1; j < highway.points.size(); j++)
         {
-            const glm::dvec2 &a = (highways.at(i).points[j - 1] - chunk.center) * SCALE;
-            const glm::dvec2 &b = (highways.at(i).points[j] - chunk.center) * SCALE;
+            const glm::dvec2 &a = (GeometryUtils::LonLatToXY(highway.points[j - 1]) - chunkCenter) * SCALE;
+            const glm::dvec2 &b = (GeometryUtils::LonLatToXY(highway.points[j]) - chunkCenter) * SCALE;
 
             glm::dvec2 dir = b - a;
             glm::dvec2 normal(-dir.y, dir.x);

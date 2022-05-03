@@ -71,7 +71,7 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
     boundsMin.y = boundsElement->DoubleAttribute("minlat");
     boundsMax.x = boundsElement->DoubleAttribute("maxlon");
     boundsMax.y = boundsElement->DoubleAttribute("maxlat");
-    outChunkData.center = GeometryUtils::LonLatToXY((boundsMin + boundsMax) / 2.0);
+    outChunkData.center = (boundsMin + boundsMax) / 2.0;
 
     std::map<int32_t, glm::dvec2> nodeIDToLonLat;
 
@@ -112,35 +112,6 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
         wayElement = wayElement->NextSiblingElement(WAY_ELEMENT_STR);
     }
 
-    if (outChunkData.buildings.size() > 0)
-    {
-        for (size_t i = 0; i < outChunkData.buildings.size(); i++)
-        {
-            for (size_t j = 0; j < outChunkData.buildings[i].outline.size(); j++)
-            {
-                glm::dvec2 &a = outChunkData.buildings[i].outline[j];
-                glm::dvec2 &b = outChunkData.buildings[i].outline[(j + 1) % outChunkData.buildings[i].outline.size()];
-                glm::dvec2 &c = outChunkData.buildings[i].outline[(j + 2) % outChunkData.buildings[i].outline.size()];
-
-                if (GeometryUtils::IsCollinear(a, b, c))
-                {
-                    outChunkData.buildings[i].outline.erase(outChunkData.buildings[i].outline.begin() + ((j + 1) % outChunkData.buildings[i].outline.size()));
-                    --j;
-                }
-            }
-
-            if (!GeometryUtils::IsPolygonCCW(outChunkData.buildings[i].outline))
-            {
-                std::reverse(outChunkData.buildings[i].outline.begin(), outChunkData.buildings[i].outline.end());
-            }
-            // Double check if polygon is now indeed CCW
-            if (!GeometryUtils::IsPolygonCCW(outChunkData.buildings[i].outline))
-            {
-                std::cout << "Polygon is still not CCW!" << std::endl;
-            }
-        }
-    }
-
     return true;
 }
 
@@ -161,8 +132,7 @@ bool OSMChunkDataSource::RetrieveBuildingData(const tinyxml2::XMLElement *elemen
         {
             double lon = nodeIDToLonLat.at(nodeId).x;
             double lat = nodeIDToLonLat.at(nodeId).y;
-            glm::dvec2 xy = GeometryUtils::LonLatToXY(lon, lat);
-            outBuildingData.outline.push_back(xy);
+            outBuildingData.outline.emplace_back(lon, lat);
         }
         nodeRefElement = nodeRefElement->NextSiblingElement(WAY_NODE_ELEMENT_STR);
     }
@@ -232,8 +202,7 @@ bool OSMChunkDataSource::RetrieveHighwayData(const tinyxml2::XMLElement *element
         {
             double lon = nodeIDToLonLat.at(nodeId).x;
             double lat = nodeIDToLonLat.at(nodeId).y;
-            glm::dvec2 xy = GeometryUtils::LonLatToXY(lon, lat);
-            outHighwayData.points.push_back(xy);
+            outHighwayData.points.emplace_back(lon, lat);
         }
         nodeRefElement = nodeRefElement->NextSiblingElement(WAY_NODE_ELEMENT_STR);
     }

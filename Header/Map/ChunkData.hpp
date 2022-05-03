@@ -11,7 +11,7 @@
  */
 struct ChunkData
 {
-    glm::dvec2 center;                      // Chunk center (xy, world-space)
+    glm::dvec2 center;                      // Chunk center (lon/lat, world-space)
 
     std::vector<BuildingData> buildings;    // List of building data
     std::vector<HighwayData> highways;      // List of highway data
