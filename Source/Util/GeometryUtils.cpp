@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <iostream>
 
+const double EARTH_RADIUS = 6378137.0;
+
 namespace GeometryUtils
 {
 bool IsCollinear(const glm::dvec2 &a, const glm::dvec2 &b, const glm::dvec2 &c)
@@ -108,5 +110,29 @@ void PolygonTriangulation(const std::vector<glm::dvec2> &polygonPoints, std::vec
 			break;
 		}
 	}
+}
+
+/**
+ * @brief Converts the provided longitude-latitude coordinates to cartesian coordinates
+ * @param[in] lonlat Longitude-latitude coordinates
+ * @return Vector containing the corresponding cartesian coordinates (in meters)
+ */
+glm::dvec2 LonLatToXY(const glm::dvec2 &lonLat)
+{
+	return LonLatToXY(lonLat.x, lonLat.y);
+}
+
+/**
+ * @brief Converts the provided longitude-latitude coordinates to cartesian coordinates
+ * @param[in] lon Longitude
+ * @param[in] lat Latitude
+ * @return Vector containing the corresponding cartesian coordinates (in meters)
+ */
+glm::dvec2 LonLatToXY(const double &lon, const double &lat)
+{
+	glm::dvec2 ret;
+	ret.x = glm::radians(lon) * EARTH_RADIUS;
+    ret.y = glm::log(glm::tan(glm::radians(lat) / 2.0 + glm::pi<double>() / 4.0)) * EARTH_RADIUS;
+	return ret;
 }
 }

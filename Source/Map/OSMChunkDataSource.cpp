@@ -78,8 +78,6 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
         nodeElement = nodeElement->NextSiblingElement(NODE_ELEMENT_STR);
     }
 
-    const double EARTH_RADIUS = 6378137.0;
-
     const tinyxml2::XMLElement *wayElement = xml.FirstChildElement(OSM_ELEMENT_STR)->FirstChildElement(WAY_ELEMENT_STR);
     while (wayElement != nullptr)
     {
@@ -98,24 +96,22 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
                 {
                     double lon = nodeIDToLonLat[nodeId].x;
                     double lat = nodeIDToLonLat[nodeId].y;
-
-                    double x = glm::radians(lon) * EARTH_RADIUS * SCALE;
-                    double y = glm::log(glm::tan(glm::radians(lat) / 2.0 + glm::pi<double>() / 4.0)) * EARTH_RADIUS * SCALE;
+                    glm::dvec2 xy = GeometryUtils::LonLatToXY(lon, lat) * SCALE;
 
                     if (outChunkData.buildings.back().outline.size() == 0)
                     {
-                        minX = maxX = x;
-                        minY = maxY = y;
+                        minX = maxX = xy.x;
+                        minY = maxY = xy.y;
                     }
                     else
                     {
-                        minX = glm::min(x, minX);
-                        maxX = glm::max(x, maxX);
-                        minY = glm::min(y, minY);  
-                        maxY = glm::max(y, maxY);
+                        minX = glm::min(xy.x, minX);
+                        maxX = glm::max(xy.x, maxX);
+                        minY = glm::min(xy.y, minY);  
+                        maxY = glm::max(xy.y, maxY);
                     }
 
-                    outChunkData.buildings.back().outline.push_back(glm::dvec2(x, y));
+                    outChunkData.buildings.back().outline.push_back(xy);
                 }
                 nodeRefElement = nodeRefElement->NextSiblingElement(WAY_NODE_ELEMENT_STR);
             }
@@ -191,11 +187,8 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
                 {
                     double lon = nodeIDToLonLat[nodeId].x;
                     double lat = nodeIDToLonLat[nodeId].y;
-
-                    double x = glm::radians(lon) * EARTH_RADIUS * SCALE;
-                    double y = glm::log(glm::tan(glm::radians(lat) / 2.0 + glm::pi<double>() / 4.0)) * EARTH_RADIUS * SCALE;
-
-                    outChunkData.highways.back().points.push_back(glm::dvec2(x, y));
+                    glm::dvec2 xy = GeometryUtils::LonLatToXY(lon, lat) * SCALE;
+                    outChunkData.highways.back().points.push_back(xy);
                 }
                 nodeRefElement = nodeRefElement->NextSiblingElement(WAY_NODE_ELEMENT_STR);
             }
