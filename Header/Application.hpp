@@ -3,6 +3,7 @@
 
 #include "Core/Camera.hpp"
 #include "Core/Window.hpp"
+#include "Map/ChunkData.hpp"
 #include "Vertex.hpp"
 
 #include "Core/Vulkan/VulkanBuffer.hpp"
@@ -187,6 +188,16 @@ private:
      * @return Returns true if the initialization was successful. Returns false otherwise.
      */
     bool InitSynchronizationTools();
+
+private:
+    /**
+     * @brief Appends geometry vertices of a chunk into a destination buffer
+     * @param[in] chunkData Chunk whose geometry vertices to append
+     * @param[in] origin Origin that the vertices are relative to (lon/lat)
+     * @param[in] dest Destination buffer to append the vertices to
+     * @return Number of vertices appended
+     */
+    uint32_t AppendChunkGeometryVertices(const ChunkData &chunkData, const glm::dvec2 &origin, std::vector<Vertex> &dest);
 };
 
 #endif // APPLICATION_HEADER

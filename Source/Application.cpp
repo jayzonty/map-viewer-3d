@@ -65,166 +65,9 @@ void Application::Run()
     ChunkData chunk;
     OSMChunkDataSource dataSource;
     dataSource.Retrieve({139.75000f, 35.60000f}, {139.80000f, 35.65000f}, chunk);
-    const std::vector<BuildingData> &buildings = chunk.buildings;
-
-    glm::dvec2 chunkCenter = GeometryUtils::LonLatToXY(chunk.center);
-
-    glm::vec3 sideColor(0.65f);
-    glm::vec3 topColor(0.9f);
-    glm::vec3 bottomColor(0.35f);
-
-    std::vector<glm::dvec2> pointsInTriangulation;
 
     std::vector<Vertex> vertices;
-    for (size_t i = 0; i < buildings.size(); i++)
-    {
-        const BuildingData &building = buildings.at(i);
-
-        float buildingHeight = building.heightInMeters * SCALE;
-        float buildingYOffset = building.heightFromGround * SCALE;
-
-        std::vector<glm::dvec2> points;
-        for (size_t j = 0; j < building.outline.size(); ++j)
-        {
-            points.push_back(GeometryUtils::LonLatToXY(building.outline[j]));
-        }
-
-        for (size_t j = 0; j < points.size(); j++)
-        {
-            glm::dvec2 &a = points[j];
-            glm::dvec2 &b = points[(j + 1) % points.size()];
-            glm::dvec2 &c = points[(j + 2) % points.size()];
-
-            if (GeometryUtils::IsCollinear(a, b, c))
-            {
-                points.erase(points.begin() + ((j + 1) % points.size()));
-                --j;
-            }
-        }
-
-        if (!GeometryUtils::IsPolygonCCW(points))
-        {
-            std::reverse(points.begin(), points.end());
-        }
-        // Double check if polygon is now indeed CCW
-        if (!GeometryUtils::IsPolygonCCW(points))
-        {
-            std::cout << "Polygon is still not CCW!" << std::endl;
-        }
-
-        // Top
-        GeometryUtils::PolygonTriangulation(points, pointsInTriangulation);
-        for (size_t j = 0; j < pointsInTriangulation.size(); j++)
-        {
-            glm::dvec2 point = (pointsInTriangulation[j] - chunkCenter) * SCALE;
-            vertices.emplace_back();
-            vertices.back().position.x = point.x;
-            vertices.back().position.y = buildingYOffset + buildingHeight;
-            vertices.back().position.z = point.y;
-            vertices.back().color = topColor;
-            vertices.back().normal = { 0.0f, 1.0f, 0.0f };
-        }
-        // Bottom
-        for (size_t j = pointsInTriangulation.size(); j > 0; j--)
-        {
-            glm::dvec2 point = (pointsInTriangulation[j - 1] - chunkCenter) * SCALE;
-            vertices.emplace_back();
-            vertices.back().position.x = point.x;
-            vertices.back().position.y = buildingYOffset;
-            vertices.back().position.z = point.y;
-            vertices.back().color = bottomColor;
-            vertices.back().normal = { 0.0f, -1.0f, 0.0f };
-        }
-
-        // Extrude
-        for (size_t j = 0; j < points.size(); j++)
-        {
-            const glm::vec2 &p0 = (points[j] - chunkCenter) * SCALE;
-            const glm::vec2 &p1 = (points[(j + 1) % points.size()] - chunkCenter) * SCALE;
-
-            vertices.emplace_back();
-            vertices.back().position = { p0.x, buildingYOffset, p0.y };
-            vertices.back().color = sideColor;
-            vertices.emplace_back();
-            vertices.back().position = { p1.x, buildingYOffset, p1.y };
-            vertices.back().color = sideColor;
-            vertices.emplace_back();
-            vertices.back().position = { p1.x, buildingYOffset + buildingHeight, p1.y };
-            vertices.back().color = sideColor;
-            vertices.emplace_back();
-            vertices.back().position = { p1.x, buildingYOffset + buildingHeight, p1.y };
-            vertices.back().color = sideColor;
-            vertices.emplace_back();
-            vertices.back().position = { p0.x, buildingYOffset + buildingHeight, p0.y };
-            vertices.back().color = sideColor;
-            vertices.emplace_back();
-            vertices.back().position = { p0.x, buildingYOffset, p0.y };
-            vertices.back().color = sideColor;
-
-            for (size_t k = 0; k < 2; ++k)
-            {
-                size_t offset = k * 3;
-                const glm::vec3 a = vertices[vertices.size() - 1 - (offset + 2)].position;
-                const glm::vec3 b = vertices[vertices.size() - 1 - (offset + 1)].position;
-                const glm::vec3 c = vertices[vertices.size() - 1 - (offset + 0)].position;
-
-                glm::vec3 normal = glm::normalize(glm::cross(c - a, b - a));
-                vertices[vertices.size() - 1 - (offset + 2)].normal = normal;
-                vertices[vertices.size() - 1 - (offset + 1)].normal = normal;
-                vertices[vertices.size() - 1 - (offset + 0)].normal = normal;
-            }
-        }
-    }
-
-    // Road vertices
-    const glm::vec3 roadColor(0.0f, 0.5f, 0.5f);
-    const std::vector<HighwayData> &highways = chunk.highways;
-    for (size_t i = 0; i < highways.size(); i++)
-    {
-        const HighwayData &highway = highways.at(i);
-
-        double roadHeight = 0.0;
-        double width = highway.roadWidth * SCALE;
-        for (size_t j = 1; j < highway.points.size(); j++)
-        {
-            const glm::dvec2 &a = (GeometryUtils::LonLatToXY(highway.points[j - 1]) - chunkCenter) * SCALE;
-            const glm::dvec2 &b = (GeometryUtils::LonLatToXY(highway.points[j]) - chunkCenter) * SCALE;
-
-            glm::dvec2 dir = b - a;
-            glm::dvec2 normal(-dir.y, dir.x);
-            normal = glm::normalize(normal);
-
-            glm::dvec2 p0 = a + normal * width / 2.0;
-            glm::dvec2 p1 = a - normal * width / 2.0;
-            glm::dvec2 p2 = b - normal * width / 2.0;
-            glm::dvec2 p3 = b + normal * width / 2.0;
-
-            vertices.emplace_back();
-            vertices.back().position = { p0.x, roadHeight, p0.y };
-            vertices.back().color = roadColor;
-            vertices.back().normal = { 0.0f, 1.0f, 0.0f };
-            vertices.emplace_back();
-            vertices.back().position = { p1.x, roadHeight, p1.y };
-            vertices.back().color = roadColor;
-            vertices.back().normal = { 0.0f, 1.0f, 0.0f };
-            vertices.emplace_back();
-            vertices.back().position = { p2.x, roadHeight, p2.y };
-            vertices.back().color = roadColor;
-            vertices.back().normal = { 0.0f, 1.0f, 0.0f };
-            vertices.emplace_back();
-            vertices.back().position = { p2.x, roadHeight, p2.y };
-            vertices.back().color = roadColor;
-            vertices.back().normal = { 0.0f, 1.0f, 0.0f };
-            vertices.emplace_back();
-            vertices.back().position = { p3.x, roadHeight, p3.y };
-            vertices.back().color = roadColor;
-            vertices.back().normal = { 0.0f, 1.0f, 0.0f };
-            vertices.emplace_back();
-            vertices.back().position = { p0.x, roadHeight, p0.y };
-            vertices.back().color = roadColor;
-            vertices.back().normal = { 0.0f, 1.0f, 0.0f };
-        }
-    }
+    AppendChunkGeometryVertices(chunk, chunk.center, vertices);
 
     if (!m_testVertexBuffer.Create(sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
     {
@@ -1457,4 +1300,179 @@ bool Application::InitSynchronizationTools()
     }
 
     return true;
+}
+
+/**
+ * @brief Appends geometry vertices of a chunk into a destination buffer
+ * @param[in] chunkData Chunk whose geometry vertices to append
+ * @param[in] origin Origin that the vertices are relative to (lon/lat)
+ * @param[in] dest Destination buffer to append the vertices to
+ * @return Number of vertices appended
+ */
+uint32_t Application::AppendChunkGeometryVertices(const ChunkData &chunkData, const glm::dvec2 &origin, std::vector<Vertex> &dest)
+{
+    uint32_t numVerticesAdded = static_cast<uint32_t>(dest.size());
+
+    glm::dvec2 chunkCenter = GeometryUtils::LonLatToXY(origin);
+
+    const std::vector<BuildingData> &buildings = chunkData.buildings;
+
+    glm::vec3 sideColor(0.65f);
+    glm::vec3 topColor(0.9f);
+    glm::vec3 bottomColor(0.35f);
+
+    std::vector<glm::dvec2> pointsInTriangulation;
+
+    for (size_t i = 0; i < buildings.size(); i++)
+    {
+        const BuildingData &building = buildings.at(i);
+
+        float buildingHeight = building.heightInMeters * SCALE;
+        float buildingYOffset = building.heightFromGround * SCALE;
+
+        std::vector<glm::dvec2> points;
+        for (size_t j = 0; j < building.outline.size(); ++j)
+        {
+            points.push_back(GeometryUtils::LonLatToXY(building.outline[j]));
+        }
+
+        for (size_t j = 0; j < points.size(); j++)
+        {
+            glm::dvec2 &a = points[j];
+            glm::dvec2 &b = points[(j + 1) % points.size()];
+            glm::dvec2 &c = points[(j + 2) % points.size()];
+
+            if (GeometryUtils::IsCollinear(a, b, c))
+            {
+                points.erase(points.begin() + ((j + 1) % points.size()));
+                --j;
+            }
+        }
+
+        if (!GeometryUtils::IsPolygonCCW(points))
+        {
+            std::reverse(points.begin(), points.end());
+        }
+        // Double check if polygon is now indeed CCW
+        if (!GeometryUtils::IsPolygonCCW(points))
+        {
+            std::cout << "Polygon is still not CCW!" << std::endl;
+        }
+
+        // Top
+        GeometryUtils::PolygonTriangulation(points, pointsInTriangulation);
+        for (size_t j = 0; j < pointsInTriangulation.size(); j++)
+        {
+            glm::dvec2 point = (pointsInTriangulation[j] - chunkCenter) * SCALE;
+            dest.emplace_back();
+            dest.back().position.x = point.x;
+            dest.back().position.y = buildingYOffset + buildingHeight;
+            dest.back().position.z = point.y;
+            dest.back().color = topColor;
+            dest.back().normal = { 0.0f, 1.0f, 0.0f };
+        }
+        // Bottom
+        for (size_t j = pointsInTriangulation.size(); j > 0; j--)
+        {
+            glm::dvec2 point = (pointsInTriangulation[j - 1] - chunkCenter) * SCALE;
+            dest.emplace_back();
+            dest.back().position.x = point.x;
+            dest.back().position.y = buildingYOffset;
+            dest.back().position.z = point.y;
+            dest.back().color = bottomColor;
+            dest.back().normal = { 0.0f, -1.0f, 0.0f };
+        }
+
+        // Extrude
+        for (size_t j = 0; j < points.size(); j++)
+        {
+            const glm::vec2 &p0 = (points[j] - chunkCenter) * SCALE;
+            const glm::vec2 &p1 = (points[(j + 1) % points.size()] - chunkCenter) * SCALE;
+
+            dest.emplace_back();
+            dest.back().position = { p0.x, buildingYOffset, p0.y };
+            dest.back().color = sideColor;
+            dest.emplace_back();
+            dest.back().position = { p1.x, buildingYOffset, p1.y };
+            dest.back().color = sideColor;
+            dest.emplace_back();
+            dest.back().position = { p1.x, buildingYOffset + buildingHeight, p1.y };
+            dest.back().color = sideColor;
+            dest.emplace_back();
+            dest.back().position = { p1.x, buildingYOffset + buildingHeight, p1.y };
+            dest.back().color = sideColor;
+            dest.emplace_back();
+            dest.back().position = { p0.x, buildingYOffset + buildingHeight, p0.y };
+            dest.back().color = sideColor;
+            dest.emplace_back();
+            dest.back().position = { p0.x, buildingYOffset, p0.y };
+            dest.back().color = sideColor;
+
+            for (size_t k = 0; k < 2; ++k)
+            {
+                size_t offset = k * 3;
+                const glm::vec3 a = dest[dest.size() - 1 - (offset + 2)].position;
+                const glm::vec3 b = dest[dest.size() - 1 - (offset + 1)].position;
+                const glm::vec3 c = dest[dest.size() - 1 - (offset + 0)].position;
+
+                glm::vec3 normal = glm::normalize(glm::cross(c - a, b - a));
+                dest[dest.size() - 1 - (offset + 2)].normal = normal;
+                dest[dest.size() - 1 - (offset + 1)].normal = normal;
+                dest[dest.size() - 1 - (offset + 0)].normal = normal;
+            }
+        }
+    }
+
+    // Road vertices
+    const glm::vec3 roadColor(0.0f, 0.5f, 0.5f);
+    const std::vector<HighwayData> &highways = chunkData.highways;
+    for (size_t i = 0; i < highways.size(); i++)
+    {
+        const HighwayData &highway = highways.at(i);
+
+        double roadHeight = 0.0;
+        double width = highway.roadWidth * SCALE;
+        for (size_t j = 1; j < highway.points.size(); j++)
+        {
+            const glm::dvec2 &a = (GeometryUtils::LonLatToXY(highway.points[j - 1]) - chunkCenter) * SCALE;
+            const glm::dvec2 &b = (GeometryUtils::LonLatToXY(highway.points[j]) - chunkCenter) * SCALE;
+
+            glm::dvec2 dir = b - a;
+            glm::dvec2 normal(-dir.y, dir.x);
+            normal = glm::normalize(normal);
+
+            glm::dvec2 p0 = a + normal * width / 2.0;
+            glm::dvec2 p1 = a - normal * width / 2.0;
+            glm::dvec2 p2 = b - normal * width / 2.0;
+            glm::dvec2 p3 = b + normal * width / 2.0;
+
+            dest.emplace_back();
+            dest.back().position = { p0.x, roadHeight, p0.y };
+            dest.back().color = roadColor;
+            dest.back().normal = { 0.0f, 1.0f, 0.0f };
+            dest.emplace_back();
+            dest.back().position = { p1.x, roadHeight, p1.y };
+            dest.back().color = roadColor;
+            dest.back().normal = { 0.0f, 1.0f, 0.0f };
+            dest.emplace_back();
+            dest.back().position = { p2.x, roadHeight, p2.y };
+            dest.back().color = roadColor;
+            dest.back().normal = { 0.0f, 1.0f, 0.0f };
+            dest.emplace_back();
+            dest.back().position = { p2.x, roadHeight, p2.y };
+            dest.back().color = roadColor;
+            dest.back().normal = { 0.0f, 1.0f, 0.0f };
+            dest.emplace_back();
+            dest.back().position = { p3.x, roadHeight, p3.y };
+            dest.back().color = roadColor;
+            dest.back().normal = { 0.0f, 1.0f, 0.0f };
+            dest.emplace_back();
+            dest.back().position = { p0.x, roadHeight, p0.y };
+            dest.back().color = roadColor;
+            dest.back().normal = { 0.0f, 1.0f, 0.0f };
+        }
+    }
+
+    numVerticesAdded = static_cast<uint32_t>(dest.size()) - numVerticesAdded;
+    return numVerticesAdded;
 }
