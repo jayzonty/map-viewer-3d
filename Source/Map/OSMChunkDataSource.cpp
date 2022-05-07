@@ -65,13 +65,12 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
 {
     const tinyxml2::XMLElement *rootElement = xml.FirstChildElement(OSM_ELEMENT_STR);
 
-    glm::dvec2 boundsMin, boundsMax;
     const tinyxml2::XMLElement *boundsElement = rootElement->FirstChildElement("bounds");
-    boundsMin.x = boundsElement->DoubleAttribute("minlon");
-    boundsMin.y = boundsElement->DoubleAttribute("minlat");
-    boundsMax.x = boundsElement->DoubleAttribute("maxlon");
-    boundsMax.y = boundsElement->DoubleAttribute("maxlat");
-    outChunkData.center = (boundsMin + boundsMax) / 2.0;
+    outChunkData.bounds.min.x = boundsElement->DoubleAttribute("minlon");
+    outChunkData.bounds.min.y = boundsElement->DoubleAttribute("minlat");
+    outChunkData.bounds.max.x = boundsElement->DoubleAttribute("maxlon");
+    outChunkData.bounds.max.y = boundsElement->DoubleAttribute("maxlat");
+    outChunkData.center = (outChunkData.bounds.min + outChunkData.bounds.max) / 2.0;
 
     std::map<int32_t, glm::dvec2> nodeIDToLonLat;
 

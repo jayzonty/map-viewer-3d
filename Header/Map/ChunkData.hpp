@@ -2,6 +2,7 @@
 #define CHUNK_DATA_HEADER
 
 #include "BuildingData.hpp"
+#include "Core/Rect.hpp"
 #include "HighwayData.hpp"
 
 #include <glm/fwd.hpp>
@@ -12,6 +13,7 @@
 struct ChunkData
 {
     glm::dvec2 center;                      // Chunk center (lon/lat, world-space)
+    RectD bounds;                           // Chunk bounds (lon/lat, world-space)
 
     std::vector<BuildingData> buildings;    // List of building data
     std::vector<HighwayData> highways;      // List of highway data
