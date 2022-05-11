@@ -1,0 +1,6 @@
+vulkan-headers
+vulkan-loader-devel
+vulkan-validation-layers
+vulkan-tools
+glfw-devel
+glslang
