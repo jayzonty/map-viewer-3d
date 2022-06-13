@@ -5,8 +5,8 @@
 #include "Core/Util/FileUtils.hpp"
 #include "Map/BuildingData.hpp"
 #include "Map/HighwayData.hpp"
-#include "Map/ChunkData.hpp"
-#include "Map/OSMChunkDataSource.hpp"
+#include "Map/TileData.hpp"
+#include "Map/OSMTileDataSource.hpp"
 #include "Util/GeometryUtils.hpp"
 #include "Vertex.hpp"
 #include "Core/Vulkan/VulkanGraphicsPipelineBuilder.hpp"
@@ -62,12 +62,14 @@ void Application::Run()
         return;
     }
 
-    ChunkData chunk;
-    OSMChunkDataSource dataSource;
-    dataSource.Retrieve({139.75000f, 35.60000f}, {139.80000f, 35.65000f}, chunk);
+    glm::ivec2 tileIndex = GeometryUtils::LonLatToTileIndex(139.75, 35.6, 16);
+
+    TileData tile;
+    OSMTileDataSource dataSource;
+    dataSource.Retrieve(tileIndex, 16, tile);
 
     std::vector<Vertex> vertices;
-    AppendChunkGeometryVertices(chunk, chunk.center, vertices);
+    AppendTileGeometryVertices(tile, tile.center, vertices);
 
     if (!m_testVertexBuffer.Create(sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
     {
@@ -1303,19 +1305,19 @@ bool Application::InitSynchronizationTools()
 }
 
 /**
- * @brief Appends geometry vertices of a chunk into a destination buffer
- * @param[in] chunkData Chunk whose geometry vertices to append
+ * @brief Appends geometry vertices of a tile into a destination buffer
+ * @param[in] tileData Tile whose geometry vertices to append
  * @param[in] origin Origin that the vertices are relative to (lon/lat)
  * @param[in] dest Destination buffer to append the vertices to
  * @return Number of vertices appended
  */
-uint32_t Application::AppendChunkGeometryVertices(const ChunkData &chunkData, const glm::dvec2 &origin, std::vector<Vertex> &dest)
+uint32_t Application::AppendTileGeometryVertices(const TileData &tileData, const glm::dvec2 &origin, std::vector<Vertex> &dest)
 {
     uint32_t numVerticesAdded = static_cast<uint32_t>(dest.size());
 
-    glm::dvec2 chunkCenter = GeometryUtils::LonLatToXY(origin);
+    glm::dvec2 tileCenter = GeometryUtils::LonLatToXY(origin);
 
-    const std::vector<BuildingData> &buildings = chunkData.buildings;
+    const std::vector<BuildingData> &buildings = tileData.buildings;
 
     glm::vec3 sideColor(0.65f);
     glm::vec3 topColor(0.9f);
@@ -1363,7 +1365,7 @@ uint32_t Application::AppendChunkGeometryVertices(const ChunkData &chunkData, co
         GeometryUtils::PolygonTriangulation(points, pointsInTriangulation);
         for (size_t j = 0; j < pointsInTriangulation.size(); j++)
         {
-            glm::dvec2 point = (pointsInTriangulation[j] - chunkCenter) * SCALE;
+            glm::dvec2 point = (pointsInTriangulation[j] - tileCenter) * SCALE;
             dest.emplace_back();
             dest.back().position.x = point.x;
             dest.back().position.y = buildingYOffset + buildingHeight;
@@ -1374,7 +1376,7 @@ uint32_t Application::AppendChunkGeometryVertices(const ChunkData &chunkData, co
         // Bottom
         for (size_t j = pointsInTriangulation.size(); j > 0; j--)
         {
-            glm::dvec2 point = (pointsInTriangulation[j - 1] - chunkCenter) * SCALE;
+            glm::dvec2 point = (pointsInTriangulation[j - 1] - tileCenter) * SCALE;
             dest.emplace_back();
             dest.back().position.x = point.x;
             dest.back().position.y = buildingYOffset;
@@ -1386,8 +1388,8 @@ uint32_t Application::AppendChunkGeometryVertices(const ChunkData &chunkData, co
         // Extrude
         for (size_t j = 0; j < points.size(); j++)
         {
-            const glm::vec2 &p0 = (points[j] - chunkCenter) * SCALE;
-            const glm::vec2 &p1 = (points[(j + 1) % points.size()] - chunkCenter) * SCALE;
+            const glm::vec2 &p0 = (points[j] - tileCenter) * SCALE;
+            const glm::vec2 &p1 = (points[(j + 1) % points.size()] - tileCenter) * SCALE;
 
             dest.emplace_back();
             dest.back().position = { p0.x, buildingYOffset, p0.y };
@@ -1425,7 +1427,7 @@ uint32_t Application::AppendChunkGeometryVertices(const ChunkData &chunkData, co
 
     // Road vertices
     const glm::vec3 roadColor(0.0f, 0.5f, 0.5f);
-    const std::vector<HighwayData> &highways = chunkData.highways;
+    const std::vector<HighwayData> &highways = tileData.highways;
     for (size_t i = 0; i < highways.size(); i++)
     {
         const HighwayData &highway = highways.at(i);
@@ -1434,8 +1436,8 @@ uint32_t Application::AppendChunkGeometryVertices(const ChunkData &chunkData, co
         double width = highway.roadWidth * SCALE;
         for (size_t j = 1; j < highway.points.size(); j++)
         {
-            const glm::dvec2 &a = (GeometryUtils::LonLatToXY(highway.points[j - 1]) - chunkCenter) * SCALE;
-            const glm::dvec2 &b = (GeometryUtils::LonLatToXY(highway.points[j]) - chunkCenter) * SCALE;
+            const glm::dvec2 &a = (GeometryUtils::LonLatToXY(highway.points[j - 1]) - tileCenter) * SCALE;
+            const glm::dvec2 &b = (GeometryUtils::LonLatToXY(highway.points[j]) - tileCenter) * SCALE;
 
             glm::dvec2 dir = b - a;
             glm::dvec2 normal(-dir.y, dir.x);

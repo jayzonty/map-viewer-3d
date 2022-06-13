@@ -3,7 +3,7 @@
 
 #include "Core/Camera.hpp"
 #include "Core/Window.hpp"
-#include "Map/ChunkData.hpp"
+#include "Map/TileData.hpp"
 #include "Vertex.hpp"
 
 #include "Core/Vulkan/VulkanBuffer.hpp"
@@ -191,13 +191,13 @@ private:
 
 private:
     /**
-     * @brief Appends geometry vertices of a chunk into a destination buffer
-     * @param[in] chunkData Chunk whose geometry vertices to append
+     * @brief Appends geometry vertices of a tile into a destination buffer
+     * @param[in] tileData Tile whose geometry vertices to append
      * @param[in] origin Origin that the vertices are relative to (lon/lat)
      * @param[in] dest Destination buffer to append the vertices to
      * @return Number of vertices appended
      */
-    uint32_t AppendChunkGeometryVertices(const ChunkData &chunkData, const glm::dvec2 &origin, std::vector<Vertex> &dest);
+    uint32_t AppendTileGeometryVertices(const TileData &tileData, const glm::dvec2 &origin, std::vector<Vertex> &dest);
 };
 
 #endif // APPLICATION_HEADER

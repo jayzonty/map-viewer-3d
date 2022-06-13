@@ -135,4 +135,42 @@ glm::dvec2 LonLatToXY(const double &lon, const double &lat)
     ret.y = glm::log(glm::tan(glm::radians(lat) / 2.0 + glm::pi<double>() / 4.0)) * EARTH_RADIUS;
 	return ret;
 }
+
+/**
+ * @brief Converts the provided longitude-latitude coordinates to its corresponding tile index
+ * @param[in] lon Longitude
+ * @param[in] lat Latitude
+ * @param[in] zoomLevel Zoom level
+ * @return Tile index of the tile that contains the provided longitude-latitude
+ */
+glm::ivec2 LonLatToTileIndex(const double &lon, const double &lat, const int &zoomLevel)
+{
+	glm::ivec2 ret;
+	ret.x = static_cast<int>(std::floor((lon + 180.0) / 360.0 * (1 << zoomLevel)));
+
+	double latRadians = glm::radians(lat);
+	double pi = glm::pi<double>();
+	ret.y = static_cast<int>(std::floor((1.0 - std::asinh(std::tan(latRadians)) / pi) / 2.0 * (1 << zoomLevel)));
+
+	return ret;
+}
+
+/**
+ * @brief Converts the provided tile index to its corresponding longitude-latitude coordinates
+ * @param[in] tileX Tile index along the x-axis
+ * @param[in] tileY Tile index along the y-axis
+ * @param[in] zoomLevel Zoom level
+ * @return Longitude-latitude coordinates of the upper-left corner of the tile
+ */
+glm::dvec2 TileIndexToLonLat(const int &tileX, const int &tileY, const int &zoomLevel)
+{
+	glm::dvec2 ret;
+	ret.x = tileX / static_cast<double>(1 << zoomLevel) * 360.0 - 180.0;
+
+	double pi = glm::pi<double>();
+	double n = pi - 2.0 * pi * tileY / static_cast<double>(1 << zoomLevel);
+	ret.y = 180.0 / pi * std::atan(0.5 * (std::exp(n) - std::exp(-n)));
+
+	return ret;
+}
 }

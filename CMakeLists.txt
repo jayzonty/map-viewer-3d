@@ -38,7 +38,7 @@ set(SOURCES
     Source/Core/Camera.cpp
     Source/Core/Window.cpp
     # --- Map ---
-    Source/Map/OSMChunkDataSource.cpp
+    Source/Map/OSMTileDataSource.cpp
     # --- Util ---
     Source/Util/GeometryUtils.cpp
     # --- Base ---

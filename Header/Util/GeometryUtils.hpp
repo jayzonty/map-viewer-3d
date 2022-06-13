@@ -1,6 +1,8 @@
 #ifndef GEOMETRY_UTILS_HEADER
 #define GEOMETRY_UTILS_HEADER
 
+#include "Core/Rect.hpp"
+#include "glm/fwd.hpp"
 #include <glm/glm.hpp>
 
 #include <cstdint>
@@ -28,6 +30,24 @@ extern glm::dvec2 LonLatToXY(const glm::dvec2 &lonLat);
  * @return Vector containing the corresponding cartesian coordinates (in meters)
  */
 extern glm::dvec2 LonLatToXY(const double &lon, const double &lat);
+
+/**
+ * @brief Converts the provided longitude-latitude coordinates to its corresponding tile index
+ * @param[in] lon Longitude
+ * @param[in] lat Latitude
+ * @param[in] zoomLevel Zoom level
+ * @return Tile index of the tile that contains the provided longitude-latitude
+ */
+extern glm::ivec2 LonLatToTileIndex(const double &lon, const double &lat, const int &zoomLevel);
+
+/**
+ * @brief Converts the provided tile index to its corresponding longitude-latitude coordinates
+ * @param[in] tileX Tile index along the x-axis
+ * @param[in] tileY Tile index along the y-axis
+ * @param[in] zoomLevel Zoom level
+ * @return Longitude-latitude coordinates of the upper-left corner of the tile
+ */
+extern glm::dvec2 TileIndexToLonLat(const int &tileX, const int &tileY, const int &zoomLevel);
 }
 
 #endif // GEOMETRY_UTILS_HEADER

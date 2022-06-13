@@ -1,6 +1,6 @@
-#include "Map/OSMChunkDataSource.hpp"
+#include "Map/OSMTileDataSource.hpp"
 
-#include "Map/ChunkDataSource.hpp"
+#include "Map/TileDataSource.hpp"
 #include "Util/GeometryUtils.hpp"
 
 #include <glm/glm.hpp>
@@ -16,61 +16,57 @@
 /**
  * @brief Constructor
  */
-OSMChunkDataSource::OSMChunkDataSource()
-    : ChunkDataSource()
+OSMTileDataSource::OSMTileDataSource()
+    : TileDataSource()
 {
 }
 
 /**
  * @brief Destructor
  */
-OSMChunkDataSource::~OSMChunkDataSource()
+OSMTileDataSource::~OSMTileDataSource()
 {
 }
 
 /**
- * @brief Retrieves the chunk data
- * @param[in] min Minimum lon/lat point for the bounds
- * @param[in] max Maximum lon/lat point for the bounds
- * @param[out] outChunkData ChunkData object that will contain the retrieved chunk data
+ * @brief Retrieves the tile data
+ * @param[in] tileIndex Tile index
+ * @param[in] zoomLevel Zoom level
+ * @param[out] outTileData TileData object that will contain the retrieved tile data
  * @return True if the operation was successful.
  */
-bool OSMChunkDataSource::Retrieve(const glm::vec2 &min, const glm::vec2 &max, ChunkData &outChunkData)
+bool OSMTileDataSource::Retrieve(const glm::ivec2 &tileIndex, const int &zoomLevel, TileData &outTileData)
 {
-    // TODO: The following is just a temporary way of retrieving for now
-    const uint32_t ZOOM_LEVEL = 14;
-    const uint32_t MAX_PRECISION = 5;
-
     std::stringstream ss;
-    ss << "Resources/map_" << std::fixed << std::setprecision(MAX_PRECISION) << ZOOM_LEVEL << "-" << min.x << "-" << min.y << "-" << max.x << "-" << max.y << ".osm";
+    ss << "Resources/map_" << zoomLevel << "-" << tileIndex.x << "-" << tileIndex.y << ".osm";
     std::string fileName = ss.str();
 
     tinyxml2::XMLDocument document;
     if (document.LoadFile(fileName.c_str()) != tinyxml2::XML_SUCCESS)
     {
-        std::cerr << "[OSMChunkDataSource] Cannot retrieve map " << fileName << std::endl;
+        std::cerr << "[OSMTileDataSource] Cannot retrieve map " << fileName << std::endl;
         return false;
     }
 
-    return RetrieveFromXML(document, outChunkData);
+    return RetrieveFromXML(document, outTileData);
 }
 
 /**
- * @brief Retrieves chunk data from the given xml document
+ * @brief Retrieves tile data from the given xml document
  * @param[in] xml XML document object
- * @param[out] outChunkData ChunkData object that will contain the retrieved chunk data
+ * @param[out] outTileData TileData object that will contain the retrieved tile data
  * @return True if the operation was successful.
  */
-bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, ChunkData &outChunkData)
+bool OSMTileDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, TileData &outTileData)
 {
     const tinyxml2::XMLElement *rootElement = xml.FirstChildElement(OSM_ELEMENT_STR);
 
     const tinyxml2::XMLElement *boundsElement = rootElement->FirstChildElement("bounds");
-    outChunkData.bounds.min.x = boundsElement->DoubleAttribute("minlon");
-    outChunkData.bounds.min.y = boundsElement->DoubleAttribute("minlat");
-    outChunkData.bounds.max.x = boundsElement->DoubleAttribute("maxlon");
-    outChunkData.bounds.max.y = boundsElement->DoubleAttribute("maxlat");
-    outChunkData.center = (outChunkData.bounds.min + outChunkData.bounds.max) / 2.0;
+    outTileData.bounds.min.x = boundsElement->DoubleAttribute("minlon");
+    outTileData.bounds.min.y = boundsElement->DoubleAttribute("minlat");
+    outTileData.bounds.max.x = boundsElement->DoubleAttribute("maxlon");
+    outTileData.bounds.max.y = boundsElement->DoubleAttribute("maxlat");
+    outTileData.center = (outTileData.bounds.min + outTileData.bounds.max) / 2.0;
 
     std::map<int32_t, glm::dvec2> nodeIDToLonLat;
 
@@ -93,18 +89,18 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
         if (HasChildTag(wayElement, BUILDING_TAG_KEY_STR)
             || HasChildTag(wayElement, BUILDING_PART_TAG_KEY_STR))
         {
-            outChunkData.buildings.emplace_back();
-            if (!RetrieveBuildingData(wayElement, nodeIDToLonLat, outChunkData.buildings.back()))
+            outTileData.buildings.emplace_back();
+            if (!RetrieveBuildingData(wayElement, nodeIDToLonLat, outTileData.buildings.back()))
             {
-                outChunkData.buildings.pop_back();
+                outTileData.buildings.pop_back();
             }
         }
         else if (HasChildTag(wayElement, HIGHWAY_TAG_KEY_STR))
         {
-            outChunkData.highways.emplace_back();
-            if (!RetrieveHighwayData(wayElement, nodeIDToLonLat, outChunkData.highways.back()))
+            outTileData.highways.emplace_back();
+            if (!RetrieveHighwayData(wayElement, nodeIDToLonLat, outTileData.highways.back()))
             {
-                outChunkData.highways.pop_back();
+                outTileData.highways.pop_back();
             }
         }
 
@@ -121,7 +117,7 @@ bool OSMChunkDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, Chunk
  * @param[out] outBuildingData BuildingData object that will contain the retrieved building data
  * @return True if the operation was successful.
  */
-bool OSMChunkDataSource::RetrieveBuildingData(const tinyxml2::XMLElement *element, const std::map<int32_t, glm::dvec2> &nodeIDToLonLat, BuildingData &outBuildingData)
+bool OSMTileDataSource::RetrieveBuildingData(const tinyxml2::XMLElement *element, const std::map<int32_t, glm::dvec2> &nodeIDToLonLat, BuildingData &outBuildingData)
 {
     const tinyxml2::XMLElement *nodeRefElement = element->FirstChildElement(WAY_NODE_ELEMENT_STR);
     while (nodeRefElement != nullptr)
@@ -191,7 +187,7 @@ bool OSMChunkDataSource::RetrieveBuildingData(const tinyxml2::XMLElement *elemen
  * @param[out] outHighwayData HighwayData object that will contain the retrieved highway data
  * @return True if the operation was successful.
  */
-bool OSMChunkDataSource::RetrieveHighwayData(const tinyxml2::XMLElement *element, const std::map<int32_t, glm::dvec2> &nodeIDToLonLat, HighwayData &outHighwayData)
+bool OSMTileDataSource::RetrieveHighwayData(const tinyxml2::XMLElement *element, const std::map<int32_t, glm::dvec2> &nodeIDToLonLat, HighwayData &outHighwayData)
 {
     const tinyxml2::XMLElement *nodeRefElement = element->FirstChildElement(WAY_NODE_ELEMENT_STR);
     while (nodeRefElement != nullptr)
@@ -231,7 +227,7 @@ bool OSMChunkDataSource::RetrieveHighwayData(const tinyxml2::XMLElement *element
     return true;
 }
 
-bool OSMChunkDataSource::HasChildTag(const tinyxml2::XMLElement *parent, const char *key)
+bool OSMTileDataSource::HasChildTag(const tinyxml2::XMLElement *parent, const char *key)
 {
     const tinyxml2::XMLElement *curr = parent->FirstChildElement(TAG_ELEMENT_STR);
     while (curr != nullptr)
@@ -250,7 +246,7 @@ bool OSMChunkDataSource::HasChildTag(const tinyxml2::XMLElement *parent, const c
     return false;
 }
 
-const tinyxml2::XMLAttribute* OSMChunkDataSource::GetChildTagValue(const tinyxml2::XMLElement *parent, const char *key)
+const tinyxml2::XMLAttribute* OSMTileDataSource::GetChildTagValue(const tinyxml2::XMLElement *parent, const char *key)
 {
     const tinyxml2::XMLElement *curr = parent->FirstChildElement(TAG_ELEMENT_STR);
     while (curr != nullptr)
@@ -267,4 +263,37 @@ const tinyxml2::XMLAttribute* OSMChunkDataSource::GetChildTagValue(const tinyxml
     }
 
     return nullptr;
+}
+
+/**
+ * @brief Gets the bounding box (in lon-lat) of the tile identified by the provided tile index
+ * @param[in] tileX Tile index in the x-axis
+ * @param[in] tileY Tile index in the y-axis
+ * @param[in] zoomLevel Zoom level
+ * @return Bounding box (in lon-lat) of the tile
+ */
+RectD OSMTileDataSource::GetLonLatBoundsFromTile(const int &tileX, const int &tileY, const int &zoomLevel)
+{
+	int numTilesPerAxis = 1 << zoomLevel;
+
+	glm::dvec2 min = GeometryUtils::TileIndexToLonLat(tileX, tileY, zoomLevel);
+
+	glm::dvec2 max = GeometryUtils::TileIndexToLonLat(tileX + 1, tileY + 1, zoomLevel);
+	if (tileX + 1 >= numTilesPerAxis)
+	{
+		max.x = 180.0f;
+	}
+	if (tileY + 1 >= numTilesPerAxis)
+	{
+		max.y = -90.0f;
+	}
+
+	double temp = min.y;
+	min.y = max.y;
+	max.y = temp;
+
+	RectD ret = {};
+	ret.min = min;
+	ret.max = max;
+	return ret;
 }

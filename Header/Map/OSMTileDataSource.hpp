@@ -1,9 +1,9 @@
-#ifndef OSM_CHUNK_DATA_SOURCE_HEADER
-#define OSM_CHUNK_DATA_SOURCE_HEADER
+#ifndef OSM_TILE_DATA_SOURCE_HEADER
+#define OSM_TILE_DATA_SOURCE_HEADER
 
 #include "Map/BuildingData.hpp"
-#include "Map/ChunkDataSource.hpp"
-#include "Map/ChunkData.hpp"
+#include "Map/TileDataSource.hpp"
+#include "Map/TileData.hpp"
 
 #include <glm/fwd.hpp>
 #include <tinyxml2.h>
@@ -11,9 +11,9 @@
 #include <map>
 
 /**
- * Source of chunk data from OSM
+ * Source of tile data from OSM
  */
-class OSMChunkDataSource : public ChunkDataSource
+class OSMTileDataSource : public TileDataSource
 {
 private:
     const char *OSM_ELEMENT_STR = "osm";
@@ -46,30 +46,30 @@ public:
     /**
      * @brief Constructor
      */
-    OSMChunkDataSource();
+    OSMTileDataSource();
 
     /**
      * @brief Destructor
      */
-    ~OSMChunkDataSource();
+    ~OSMTileDataSource();
 
     /**
-     * @brief Retrieves the chunk data
-     * @param[in] min Minimum lon/lat point for the bounds
-     * @param[in] max Maximum lon/lat point for the bounds
-     * @param[out] outChunkData ChunkData object that will contain the retrieved chunk data
+     * @brief Retrieves the tile data
+     * @param[in] tileIndex Tile index
+     * @param[in] zoomLevel Zoom level
+     * @param[out] outTileData TileData object that will contain the retrieved tile data
      * @return True if the operation was successful.
      */
-    bool Retrieve(const glm::vec2 &min, const glm::vec2 &max, ChunkData &outChunkData) override;
+    bool Retrieve(const glm::ivec2 &tileIndex, const int &zoomLevel, TileData &outTileData) override;
 
 private:
     /**
-     * @brief Retrieves chunk data from the given xml document
+     * @brief Retrieves tile data from the given xml document
      * @param[in] xml XML document object
-     * @param[out] outChunkData ChunkData object that will contain the retrieved chunk data
+     * @param[out] outTileData TileData object that will contain the retrieved tile data
      * @return True if the operation was successful.
      */
-    bool RetrieveFromXML(const tinyxml2::XMLDocument &xml, ChunkData &outChunkData);
+    bool RetrieveFromXML(const tinyxml2::XMLDocument &xml, TileData &outTileData);
 
     /**
      * @brief Retrieves building data from the given xml element
@@ -91,6 +91,15 @@ private:
 
     bool HasChildTag(const tinyxml2::XMLElement *parent, const char *key);
     const tinyxml2::XMLAttribute* GetChildTagValue(const tinyxml2::XMLElement *parent, const char *key);
+
+    /**
+     * @brief Gets the bounding box (in lon-lat) of the tile identified by the provided tile index
+     * @param[in] tileX Tile index in the x-axis
+     * @param[in] tileY Tile index in the y-axis
+     * @param[in] zoomLevel Zoom level
+     * @return Bounding box (in lon-lat) of the tile
+     */
+    RectD GetLonLatBoundsFromTile(const int &tileX, const int &tileY, const int &zoomLevel);
 };
 
-#endif // OSM_CHUNK_DATA_SOURCE_HEADER
+#endif // OSM_TILE_DATA_SOURCE_HEADER
