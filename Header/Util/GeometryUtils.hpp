@@ -31,6 +31,8 @@ extern glm::dvec2 LonLatToXY(const glm::dvec2 &lonLat);
  */
 extern glm::dvec2 LonLatToXY(const double &lon, const double &lat);
 
+extern glm::dvec2 XYToLonLat(const double x, const double y);
+
 /**
  * @brief Converts the provided longitude-latitude coordinates to its corresponding tile index
  * @param[in] lon Longitude
@@ -48,6 +50,15 @@ extern glm::ivec2 LonLatToTileIndex(const double &lon, const double &lat, const 
  * @return Longitude-latitude coordinates of the upper-left corner of the tile
  */
 extern glm::dvec2 TileIndexToLonLat(const int &tileX, const int &tileY, const int &zoomLevel);
+
+/**
+ * @brief Gets the bounding box (in lon-lat) of the tile identified by the provided tile index
+ * @param[in] tileX Tile index in the x-axis
+ * @param[in] tileY Tile index in the y-axis
+ * @param[in] zoomLevel Zoom level
+ * @return Bounding box (in lon-lat) of the tile
+ */
+extern RectD GetLonLatBoundsFromTile(const int &tileX, const int &tileY, const int &zoomLevel);
 }
 
 #endif // GEOMETRY_UTILS_HEADER

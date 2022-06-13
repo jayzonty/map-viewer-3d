@@ -136,6 +136,17 @@ glm::dvec2 LonLatToXY(const double &lon, const double &lat)
 	return ret;
 }
 
+glm::dvec2 XYToLonLat(const double x, const double y)
+{
+	glm::dvec2 ret;
+	ret.x = glm::degrees(x / EARTH_RADIUS);
+
+	double pi = glm::pi<double>();
+	ret.y = glm::degrees(2 * glm::atan(glm::exp(y / EARTH_RADIUS)) - pi / 2.0);
+
+	return ret;
+}
+
 /**
  * @brief Converts the provided longitude-latitude coordinates to its corresponding tile index
  * @param[in] lon Longitude
@@ -171,6 +182,39 @@ glm::dvec2 TileIndexToLonLat(const int &tileX, const int &tileY, const int &zoom
 	double n = pi - 2.0 * pi * tileY / static_cast<double>(1 << zoomLevel);
 	ret.y = 180.0 / pi * std::atan(0.5 * (std::exp(n) - std::exp(-n)));
 
+	return ret;
+}
+
+/**
+ * @brief Gets the bounding box (in lon-lat) of the tile identified by the provided tile index
+ * @param[in] tileX Tile index in the x-axis
+ * @param[in] tileY Tile index in the y-axis
+ * @param[in] zoomLevel Zoom level
+ * @return Bounding box (in lon-lat) of the tile
+ */
+RectD GetLonLatBoundsFromTile(const int &tileX, const int &tileY, const int &zoomLevel)
+{
+	int numTilesPerAxis = 1 << zoomLevel;
+
+	glm::dvec2 min = GeometryUtils::TileIndexToLonLat(tileX, tileY, zoomLevel);
+
+	glm::dvec2 max = GeometryUtils::TileIndexToLonLat(tileX + 1, tileY + 1, zoomLevel);
+	if (tileX + 1 >= numTilesPerAxis)
+	{
+		max.x = 180.0f;
+	}
+	if (tileY + 1 >= numTilesPerAxis)
+	{
+		max.y = -90.0f;
+	}
+
+	double temp = min.y;
+	min.y = max.y;
+	max.y = temp;
+
+	RectD ret = {};
+	ret.min = min;
+	ret.max = max;
 	return ret;
 }
 }

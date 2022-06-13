@@ -91,15 +91,6 @@ private:
 
     bool HasChildTag(const tinyxml2::XMLElement *parent, const char *key);
     const tinyxml2::XMLAttribute* GetChildTagValue(const tinyxml2::XMLElement *parent, const char *key);
-
-    /**
-     * @brief Gets the bounding box (in lon-lat) of the tile identified by the provided tile index
-     * @param[in] tileX Tile index in the x-axis
-     * @param[in] tileY Tile index in the y-axis
-     * @param[in] zoomLevel Zoom level
-     * @return Bounding box (in lon-lat) of the tile
-     */
-    RectD GetLonLatBoundsFromTile(const int &tileX, const int &tileY, const int &zoomLevel);
 };
 
 #endif // OSM_TILE_DATA_SOURCE_HEADER

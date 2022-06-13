@@ -264,36 +264,3 @@ const tinyxml2::XMLAttribute* OSMTileDataSource::GetChildTagValue(const tinyxml2
 
     return nullptr;
 }
-
-/**
- * @brief Gets the bounding box (in lon-lat) of the tile identified by the provided tile index
- * @param[in] tileX Tile index in the x-axis
- * @param[in] tileY Tile index in the y-axis
- * @param[in] zoomLevel Zoom level
- * @return Bounding box (in lon-lat) of the tile
- */
-RectD OSMTileDataSource::GetLonLatBoundsFromTile(const int &tileX, const int &tileY, const int &zoomLevel)
-{
-	int numTilesPerAxis = 1 << zoomLevel;
-
-	glm::dvec2 min = GeometryUtils::TileIndexToLonLat(tileX, tileY, zoomLevel);
-
-	glm::dvec2 max = GeometryUtils::TileIndexToLonLat(tileX + 1, tileY + 1, zoomLevel);
-	if (tileX + 1 >= numTilesPerAxis)
-	{
-		max.x = 180.0f;
-	}
-	if (tileY + 1 >= numTilesPerAxis)
-	{
-		max.y = -90.0f;
-	}
-
-	double temp = min.y;
-	min.y = max.y;
-	max.y = temp;
-
-	RectD ret = {};
-	ret.min = min;
-	ret.max = max;
-	return ret;
-}

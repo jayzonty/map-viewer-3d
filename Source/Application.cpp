@@ -62,29 +62,21 @@ void Application::Run()
         return;
     }
 
-    glm::ivec2 tileIndex = GeometryUtils::LonLatToTileIndex(139.75, 35.6, 16);
-
-    TileData tile;
-    OSMTileDataSource dataSource;
-    dataSource.Retrieve(tileIndex, 16, tile);
-
-    std::vector<Vertex> vertices;
-    AppendTileGeometryVertices(tile, tile.bounds.min, vertices);
-
-    if (!m_testVertexBuffer.Create(sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
+    const uint32_t MAX_VERTEX_COUNT = 1000000;
+    if (!m_testVertexBuffer.Create(sizeof(Vertex) * MAX_VERTEX_COUNT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
     {
         std::cerr << "Failed to create vertex buffer!" << std::endl;
     }
-    void *data = m_testVertexBuffer.MapMemory(0, sizeof(Vertex) * vertices.size());
-    memcpy(data, vertices.data(), sizeof(Vertex) * vertices.size());
-    m_testVertexBuffer.UnmapMemory();
+
+    const int ZOOM_LEVEL = 16;
+    glm::ivec2 tileIndex = GeometryUtils::LonLatToTileIndex(139.75, 35.6, 16);
+    UpdateCurrentTile(tileIndex);
 
     double prevTime = glfwGetTime();
 
     m_camera.SetFieldOfView(60.0f);
     m_camera.SetAspectRatio(m_window.GetWidth() * 1.0f / m_window.GetHeight());
-    m_camera.SetPosition(glm::vec3(0.0f, 2.0f, 3.0f));
-    m_camera.SetPosition(glm::vec3(-10.0f, 10.0f, 2.0f));
+    m_camera.SetPosition(glm::vec3(0.0f, 2.0f, 0.0f));
     m_camera.SetWorldUpVector(glm::vec3(0.0f, 1.0f, 0.0f));
 
     glm::vec3 dirLightDirection = glm::vec3(0.0f, -1.0f, 1.0f);
@@ -120,7 +112,7 @@ void Application::Run()
         {
             cameraMovement = glm::normalize(cameraMovement);
         }
-        cameraMovement *= 5.0f * deltaTime;
+        cameraMovement *= 10.0f * deltaTime;
 
         float yaw = m_camera.GetYaw() + Input::GetMouseDeltaX() * 0.25f;
         float pitch = m_camera.GetPitch() - Input::GetMouseDeltaY() * 0.25f;
@@ -132,6 +124,21 @@ void Application::Run()
         (
             m_camera.GetPosition() + cameraMovement.x * m_camera.GetRightVector() + cameraMovement.z * m_camera.GetForwardVector()
         );
+
+        glm::dvec2 playerWorldPosition = { m_camera.GetPosition().x / SCALE, m_camera.GetPosition().z / SCALE };
+        playerWorldPosition += GeometryUtils::LonLatToXY(m_origin);
+        glm::dvec2 playerLonLat = GeometryUtils::XYToLonLat(playerWorldPosition.x, playerWorldPosition.y);
+        glm::ivec2 newTileIndex = GeometryUtils::LonLatToTileIndex(playerLonLat.x, playerLonLat.y, ZOOM_LEVEL);
+        if (newTileIndex != m_currentTileIndex)
+        {
+            UpdateCurrentTile(newTileIndex);
+
+            // Readjust player position to the new origin
+            glm::dvec2 originXY = GeometryUtils::LonLatToXY(m_origin);
+            playerWorldPosition -= originXY;
+            playerWorldPosition *= SCALE;
+            m_camera.SetPosition(glm::vec3(playerWorldPosition.x, m_camera.GetPosition().y, playerWorldPosition.y));
+        }
 
         // --- Draw frame start ---
 
@@ -227,7 +234,7 @@ void Application::Run()
             pushConstant.projView = lightMatrix;
             vkCmdPushConstants(commandBuffer, m_shadowPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pushConstant);
 
-            vkCmdDraw(commandBuffer, vertices.size(), 1, 0, 0);
+            vkCmdDraw(commandBuffer, m_vertices.size(), 1, 0, 0);
 
             vkCmdEndRenderPass(commandBuffer);
         }
@@ -289,7 +296,7 @@ void Application::Run()
         pushConstant.lightProjView = lightMatrix;
         pushConstant.projView = projView;
         vkCmdPushConstants(commandBuffer, m_vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pushConstant);
-        vkCmdDraw(commandBuffer, vertices.size(), 1, 0, 0);
+        vkCmdDraw(commandBuffer, m_vertices.size(), 1, 0, 0);
 
         vkCmdEndRenderPass(commandBuffer);
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
@@ -1477,4 +1484,53 @@ uint32_t Application::AppendTileGeometryVertices(const TileData &tileData, const
 
     numVerticesAdded = static_cast<uint32_t>(dest.size()) - numVerticesAdded;
     return numVerticesAdded;
+}
+
+/**
+ * @brief Performs the necessary setup to change to a new current tile.
+ * @param[in] newCurrentTileIndex Tile index of the new tile
+ */
+void Application::UpdateCurrentTile(const glm::ivec2 &newCurrentTileIndex)
+{
+    m_currentTileIndex = newCurrentTileIndex;
+
+    const int zoomLevel = 16;
+    RectD tileBounds = GeometryUtils::GetLonLatBoundsFromTile(newCurrentTileIndex.x, newCurrentTileIndex.y, zoomLevel);
+    m_origin = tileBounds.min;
+
+    m_activeTiles.clear();
+
+    OSMTileDataSource dataSource = {};
+    const int viewDist = 1;
+    for (int dy = -viewDist; dy <= viewDist; ++dy)
+    {
+        for (int dx = -viewDist; dx <= viewDist; ++dx)
+        {
+            glm::ivec2 index = newCurrentTileIndex;
+            index.x += dx;
+            index.y += dy;
+            m_activeTiles.emplace_back();
+            if (!dataSource.Retrieve(index, zoomLevel, m_activeTiles.back()))
+            {
+                m_activeTiles.pop_back();
+            }
+        }
+    }
+
+    m_vertices.clear();
+    for (size_t i = 0; i < m_activeTiles.size(); ++i)
+    {
+        AppendTileGeometryVertices(m_activeTiles[i], m_origin, m_vertices);
+    }
+
+    const uint32_t MAX_VERTEX_COUNT = 1000000;
+    uint32_t size = m_vertices.size();
+    size = std::min(size, MAX_VERTEX_COUNT);
+    size *= sizeof(Vertex);
+    if (size > 0)
+    {
+        void *data = m_testVertexBuffer.MapMemory(0, size);
+        memcpy(data, m_vertices.data(), sizeof(Vertex) * m_vertices.size());
+        m_testVertexBuffer.UnmapMemory();
+    }
 }

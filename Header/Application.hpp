@@ -9,6 +9,7 @@
 #include "Core/Vulkan/VulkanBuffer.hpp"
 #include "Core/Vulkan/VulkanImage.hpp"
 #include "Core/Vulkan/VulkanImageView.hpp"
+#include "glm/fwd.hpp"
 
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_core.h>
@@ -99,6 +100,11 @@ private:
     VkSampler m_shadowMapSampler;           // sampler for the shadow map
 
     Camera m_camera;    // Camera
+
+    glm::dvec2 m_origin;                    // Current global origin offset
+    glm::ivec2 m_currentTileIndex;          // Current tile index
+    std::vector<TileData> m_activeTiles;    // List of active tiles
+    std::vector<Vertex> m_vertices;         // List of vertices
 
 public:
     /**
@@ -198,6 +204,12 @@ private:
      * @return Number of vertices appended
      */
     uint32_t AppendTileGeometryVertices(const TileData &tileData, const glm::dvec2 &origin, std::vector<Vertex> &dest);
+
+    /**
+     * @brief Performs the necessary setup to change to a new current tile.
+     * @param[in] newCurrentTileIndex Tile index of the new tile
+     */
+    void UpdateCurrentTile(const glm::ivec2 &newCurrentTileIndex);
 };
 
 #endif // APPLICATION_HEADER
