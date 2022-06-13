@@ -69,7 +69,7 @@ void Application::Run()
     dataSource.Retrieve(tileIndex, 16, tile);
 
     std::vector<Vertex> vertices;
-    AppendTileGeometryVertices(tile, tile.center, vertices);
+    AppendTileGeometryVertices(tile, tile.bounds.min, vertices);
 
     if (!m_testVertexBuffer.Create(sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
     {

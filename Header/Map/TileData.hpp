@@ -12,7 +12,7 @@
  */
 struct TileData
 {
-    glm::dvec2 center;                      // Tile center (lon/lat, world-space)
+    glm::ivec2 index;                       // Tile index
     RectD bounds;                           // Tile bounds (lon/lat, world-space)
 
     std::vector<BuildingData> buildings;    // List of building data

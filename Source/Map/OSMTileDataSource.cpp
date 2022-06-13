@@ -48,6 +48,7 @@ bool OSMTileDataSource::Retrieve(const glm::ivec2 &tileIndex, const int &zoomLev
         return false;
     }
 
+    outTileData.index = tileIndex;
     return RetrieveFromXML(document, outTileData);
 }
 
@@ -66,7 +67,6 @@ bool OSMTileDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, TileDa
     outTileData.bounds.min.y = boundsElement->DoubleAttribute("minlat");
     outTileData.bounds.max.x = boundsElement->DoubleAttribute("maxlon");
     outTileData.bounds.max.y = boundsElement->DoubleAttribute("maxlat");
-    outTileData.center = (outTileData.bounds.min + outTileData.bounds.max) / 2.0;
 
     std::map<int32_t, glm::dvec2> nodeIDToLonLat;
 
