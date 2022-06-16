@@ -65,6 +65,12 @@ private:
         VulkanBuffer cameraDataUniformBuffer;   // Uniform buffer for the camera data
     };
 
+    struct TileCache
+    {
+        TileData tileData;
+        std::vector<Vertex> vertices;
+    };
+
     const double SCALE = 0.05;                  // World scale
 
 private:
@@ -103,8 +109,10 @@ private:
 
     glm::dvec2 m_origin;                    // Current global origin offset
     glm::ivec2 m_currentTileIndex;          // Current tile index
-    std::vector<TileData> m_activeTiles;    // List of active tiles
-    std::vector<Vertex> m_vertices;         // List of vertices
+    std::vector<TileCache> m_activeTiles;    // List of active tiles
+
+    RectI m_currentViewArea;                // Current view area (in tiles)
+    uint32_t m_numVertices;                 // Number of vertices to render
 
 public:
     /**

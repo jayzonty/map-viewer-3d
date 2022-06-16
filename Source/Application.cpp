@@ -234,7 +234,7 @@ void Application::Run()
             pushConstant.projView = lightMatrix;
             vkCmdPushConstants(commandBuffer, m_shadowPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pushConstant);
 
-            vkCmdDraw(commandBuffer, m_vertices.size(), 1, 0, 0);
+            vkCmdDraw(commandBuffer, m_numVertices, 1, 0, 0);
 
             vkCmdEndRenderPass(commandBuffer);
         }
@@ -296,7 +296,7 @@ void Application::Run()
         pushConstant.lightProjView = lightMatrix;
         pushConstant.projView = projView;
         vkCmdPushConstants(commandBuffer, m_vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstant), &pushConstant);
-        vkCmdDraw(commandBuffer, m_vertices.size(), 1, 0, 0);
+        vkCmdDraw(commandBuffer, m_numVertices, 1, 0, 0);
 
         vkCmdEndRenderPass(commandBuffer);
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
@@ -1498,10 +1498,26 @@ void Application::UpdateCurrentTile(const glm::ivec2 &newCurrentTileIndex)
     RectD tileBounds = GeometryUtils::GetLonLatBoundsFromTile(newCurrentTileIndex.x, newCurrentTileIndex.y, zoomLevel);
     m_origin = tileBounds.min;
 
-    m_activeTiles.clear();
-
-    OSMTileDataSource dataSource = {};
     const int viewDist = 1;
+    RectI oldViewArea = m_currentViewArea;
+    RectI newViewArea = {};
+    newViewArea.min = newCurrentTileIndex - viewDist;
+    newViewArea.max = newCurrentTileIndex + viewDist;
+    m_currentViewArea = newViewArea;
+
+    // Remove tiles that are not part of the new view area
+    for (size_t i = m_activeTiles.size(); i > 0; --i)
+    {
+        size_t idx = i - 1;
+        if (!RectI::IsPointInsideRect(newViewArea, m_activeTiles[idx].tileData.index))
+        {
+            m_activeTiles.erase(m_activeTiles.begin() + idx);
+        }
+    }
+
+    // Go through tiles in the new view area, and if they are also part
+    // of the old view area, skip since its data should already be in the active tiles list
+    OSMTileDataSource dataSource = {};
     for (int dy = -viewDist; dy <= viewDist; ++dy)
     {
         for (int dx = -viewDist; dx <= viewDist; ++dx)
@@ -1509,28 +1525,32 @@ void Application::UpdateCurrentTile(const glm::ivec2 &newCurrentTileIndex)
             glm::ivec2 index = newCurrentTileIndex;
             index.x += dx;
             index.y += dy;
+
+            if (RectI::IsPointInsideRect(oldViewArea, index))
+            {
+                continue;
+            }
+
             m_activeTiles.emplace_back();
-            if (!dataSource.Retrieve(index, zoomLevel, m_activeTiles.back()))
+            if (!dataSource.Retrieve(index, zoomLevel, m_activeTiles.back().tileData))
             {
                 m_activeTiles.pop_back();
             }
         }
     }
 
-    m_vertices.clear();
+    const uint32_t MAX_VERTEX_COUNT = 1000000;
+    Vertex *data = reinterpret_cast<Vertex*>(m_testVertexBuffer.MapMemory(0, MAX_VERTEX_COUNT * sizeof(Vertex)));
+
+    m_numVertices = 0;
     for (size_t i = 0; i < m_activeTiles.size(); ++i)
     {
-        AppendTileGeometryVertices(m_activeTiles[i], m_origin, m_vertices);
+        m_activeTiles[i].vertices.clear();
+        AppendTileGeometryVertices(m_activeTiles[i].tileData, m_origin, m_activeTiles[i].vertices);
+        memcpy(data + m_numVertices, m_activeTiles[i].vertices.data(), sizeof(Vertex) * m_activeTiles[i].vertices.size());
+
+        m_numVertices += m_activeTiles[i].vertices.size();
     }
 
-    const uint32_t MAX_VERTEX_COUNT = 1000000;
-    uint32_t size = m_vertices.size();
-    size = std::min(size, MAX_VERTEX_COUNT);
-    size *= sizeof(Vertex);
-    if (size > 0)
-    {
-        void *data = m_testVertexBuffer.MapMemory(0, size);
-        memcpy(data, m_vertices.data(), sizeof(Vertex) * m_vertices.size());
-        m_testVertexBuffer.UnmapMemory();
-    }
+    m_testVertexBuffer.UnmapMemory();
 }
