@@ -1134,7 +1134,7 @@ bool Application::InitDescriptors()
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = m_maxFramesInFlight;
+    poolInfo.maxSets = m_maxFramesInFlight * poolSizes.size();
 
     if (vkCreateDescriptorPool(VulkanContext::GetLogicalDevice(), &poolInfo, nullptr, &m_vkDescriptorPool) != VK_SUCCESS)
     {
@@ -1150,9 +1150,26 @@ bool Application::InitDescriptors()
     descriptorsAllocInfo.pSetLayouts = layouts.data();
 
     std::vector<VkDescriptorSet> descriptorSets(m_maxFramesInFlight);
-    if (vkAllocateDescriptorSets(VulkanContext::GetLogicalDevice(), &descriptorsAllocInfo, descriptorSets.data()) != VK_SUCCESS)
+    VkResult r = vkAllocateDescriptorSets(VulkanContext::GetLogicalDevice(), &descriptorsAllocInfo, descriptorSets.data());
+    if (r != VK_SUCCESS)
     {
         std::cerr << "[Application] Failed to allocate descriptor sets!" << std::endl;
+        if (r == VK_ERROR_OUT_OF_HOST_MEMORY)
+        {
+            std::cerr << "[Application] Out of host memory!" << std::endl;
+        }
+        else if (r == VK_ERROR_OUT_OF_DEVICE_MEMORY)
+        {
+            std::cerr << "[Application] Out of device memory!" << std::endl;
+        }
+        else if (r == VK_ERROR_FRAGMENTED_POOL)
+        {
+            std::cerr << "[Application] Fragmented pool!" << std::endl;
+        }
+        else if (r == VK_ERROR_OUT_OF_POOL_MEMORY)
+        {
+            std::cerr << "[Application] Out of pool memory!" << std::endl;
+        }
         return false;
     }
 
