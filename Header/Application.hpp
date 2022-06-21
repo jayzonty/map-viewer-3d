@@ -14,7 +14,11 @@
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_core.h>
 
+#include <condition_variable>
 #include <cstdalign>
+#include <mutex>
+#include <queue>
+#include <vector>
 
 class Application
 {
@@ -65,10 +69,12 @@ private:
         VulkanBuffer cameraDataUniformBuffer;   // Uniform buffer for the camera data
     };
 
-    struct TileCache
+    // Struct containing information about a retrieve tile job
+    struct RetrieveTileJob
     {
-        TileData tileData;
-        std::vector<Vertex> vertices;
+        glm::ivec2 tileIndex;                   // Index of the tile to retrieve
+        int zoomLevel;                          // Zoom level
+        bool addImmediately;                    // Flag indicating whether to prefetch or to add to active tiles immediately
     };
 
     const double SCALE = 0.05;                  // World scale
@@ -109,10 +115,18 @@ private:
 
     glm::dvec2 m_origin;                    // Current global origin offset
     glm::ivec2 m_currentTileIndex;          // Current tile index
-    std::vector<TileCache> m_activeTiles;    // List of active tiles
+    std::vector<TileData> m_activeTiles;    // List of active tiles
 
     RectI m_currentViewArea;                // Current view area (in tiles)
     uint32_t m_numVertices;                 // Number of vertices to render
+
+    bool m_workerThreadRunning;             // Flag indicating whether the worker thread is running
+
+    std::queue<RetrieveTileJob> m_retrieveTileJobs;     // List of retrieve tile jobs
+    std::mutex m_retrieveTileJobsMutex;                 // Mutex for the retrieve tile jobs list
+
+    std::mutex m_tilesUpdateMutex;                      // Mutex for a tile update routine
+    bool m_tilesUpdated;                                // Flag indicating whether the tiles have recently been updated
 
 public:
     /**
@@ -218,6 +232,12 @@ private:
      * @param[in] newCurrentTileIndex Tile index of the new tile
      */
     void UpdateCurrentTile(const glm::ivec2 &newCurrentTileIndex);
+
+    /**
+     * @brief Function run by the worker thread where tiles are downloaded
+     * in the background.
+     */
+    void WorkerThreadFunc();
 };
 
 #endif // APPLICATION_HEADER

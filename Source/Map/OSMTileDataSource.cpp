@@ -3,6 +3,7 @@
 #include "Map/TileDataSource.hpp"
 #include "Util/GeometryUtils.hpp"
 
+#include <fstream>
 #include <glm/glm.hpp>
 #include <glm/ext/scalar_constants.hpp>
 #include <tinyxml2.h>
@@ -12,6 +13,14 @@
 #include <iostream>
 #include <map>
 #include <sstream>
+
+// Networking includes
+#include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 
 /**
  * @brief Constructor
@@ -42,14 +51,52 @@ bool OSMTileDataSource::Retrieve(const glm::ivec2 &tileIndex, const int &zoomLev
     std::string fileName = ss.str();
 
     tinyxml2::XMLDocument document;
-    if (document.LoadFile(fileName.c_str()) != tinyxml2::XML_SUCCESS)
+    if (document.LoadFile(fileName.c_str()) == tinyxml2::XML_SUCCESS)
     {
-        std::cerr << "[OSMTileDataSource] Cannot retrieve map " << fileName << std::endl;
+        outTileData.index = tileIndex;
+        return RetrieveFromXML(document, outTileData);
+    }
+
+    tinyxml2::XMLDocument *downloaded = RetrieveFromServer(tileIndex, zoomLevel);
+    if (downloaded != nullptr)
+    {
+        outTileData.index = tileIndex;
+        return RetrieveFromXML(*downloaded, outTileData);
+    }
+
+    std::cerr << "[OSMTileDataSource] Cannot retrieve map " << fileName << std::endl;
+    return false;
+}
+
+/**
+ * @brief Prefetches the tile data at the specified tile index and zoom level, and
+ * caches the result locally.
+ * @param[in] tileIndex Tile index of the tile to prefetch
+ * @param[in] zoomLevel Zoom level
+ * @return True if the operation was successful
+ */
+bool OSMTileDataSource::Prefetch(const glm::ivec2 &tileIndex, const int &zoomLevel)
+{
+    std::stringstream ss;
+    ss << "Resources/map_" << zoomLevel << "-" << tileIndex.x << "-" << tileIndex.y << ".osm";
+    std::string fileName = ss.str();
+
+    std::ifstream file(fileName);
+    if (!file.fail())
+    {
+        return true;
+    }
+
+    tinyxml2::XMLDocument *doc = RetrieveFromServer(tileIndex, zoomLevel);
+    if (doc == nullptr)
+    {
         return false;
     }
 
-    outTileData.index = tileIndex;
-    return RetrieveFromXML(document, outTileData);
+    doc->SaveFile(fileName.c_str());
+    delete doc;
+
+    return true;
 }
 
 /**
@@ -108,6 +155,100 @@ bool OSMTileDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, TileDa
     }
 
     return true;
+}
+
+/**
+ * @brief Retrieves tile data from the server
+ * @param[in] tileIndex Tile index
+ * @param[in] zoomLevel Zoom level
+ * @return XML document representing the tile data. Returns nullptr if the tile data cannot be retrieved from the server
+ */
+tinyxml2::XMLDocument* OSMTileDataSource::RetrieveFromServer(const glm::ivec2 &tileIndex, const int &zoomLevel)
+{
+    RectD tileBounds = GeometryUtils::GetLonLatBoundsFromTile(tileIndex.x, tileIndex.y, zoomLevel);
+
+    std::string host = "overpass-api.de";
+    double left = tileBounds.min.x;
+    double bottom = tileBounds.min.y;
+    double right = tileBounds.max.x;
+    double top = tileBounds.max.y;
+    std::stringstream requestSS;
+    requestSS << "GET /api/interpreter?data=[bbox:" << bottom << "%2C" << left << "%2C" << top << "%2C" << right << "];(node;<;);out%20meta;\r\n";
+    std::string request = requestSS.str();
+    
+    addrinfo hints = {};
+    hints.ai_family = AF_INET;
+    hints.ai_flags = AI_CANONNAME;
+
+    addrinfo *result = nullptr;
+    int res = getaddrinfo(host.c_str(), nullptr, &hints, &result);
+    if (res != 0)
+    {
+        std::cout << "Failed to get host info!" << std::endl;
+        return nullptr;
+    }
+
+    sockaddr_in *temp = reinterpret_cast<sockaddr_in*>(result->ai_addr);
+    temp->sin_port = htons(80);
+
+    int socketFd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (socketFd == -1)
+    {
+        std::cout << "[OSMTileDataSource] Failed to create socket!" << std::endl;
+        freeaddrinfo(result);
+        return nullptr;
+    }
+
+    int tcpNoDelayOn = 1;
+    setsockopt(socketFd, IPPROTO_TCP, TCP_NODELAY, &tcpNoDelayOn, sizeof(int));
+
+    std::cout << "[OSMTileDataSource] Trying to connect..." << std::endl;
+    res = connect(socketFd, result->ai_addr, result->ai_addrlen);
+    if (res == -1)
+    {
+        std::cout << "[OSMTileDataSource] Failed to connect!" << std::endl;
+        shutdown(socketFd, SHUT_RDWR);
+        close(socketFd);
+        freeaddrinfo(result);
+        return nullptr;
+    }
+
+    std::cout << "[OSMTileDataSource] Posting request..." << std::endl;
+    size_t sz = request.size() + sizeof(char);
+    if (write(socketFd, request.c_str(), sz) != sz)
+    {
+        std::cout << "[OSMTileDataSource] Failed to post request!" << std::endl;
+        shutdown(socketFd, SHUT_RDWR);
+        close(socketFd);
+        freeaddrinfo(result);
+        return nullptr;
+    }
+
+    std::stringstream ss;
+    const int BUFFER_SIZE = 1000000;
+    char buf[BUFFER_SIZE];
+    while ((sz = read(socketFd, buf, BUFFER_SIZE - 1)) != 0)
+    {
+        ss.write(buf, sz);
+        memset(buf, 0, sizeof(char) * BUFFER_SIZE);
+    }
+    std::cout << "[OSMTileDataSource] Closing socket..." << std::endl;
+
+    shutdown(socketFd, SHUT_RDWR);
+    close(socketFd);
+    freeaddrinfo(result);
+    std::cout << "[OSMTileDataSource] Socket closed!" << std::endl;
+
+    std::string str = ss.str();
+    tinyxml2::XMLDocument *ret = new tinyxml2::XMLDocument();
+    if (ret->Parse(str.c_str()) != tinyxml2::XML_SUCCESS)
+    {
+        std::cout << "[OSMTileDataSource] Failed to parse XML!" << std::endl;
+        delete ret;
+        return nullptr;
+    }
+    std::cout << "[OSMTileDataSource] XML Loaded!" << std::endl;
+    return ret;
 }
 
 /**

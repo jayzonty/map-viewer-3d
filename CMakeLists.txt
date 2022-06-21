@@ -5,6 +5,7 @@ project(MapViewer)
 
 find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
+find_package(Threads REQUIRED)
 
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -52,4 +53,4 @@ set(SOURCES
 add_executable(MapViewer ${SOURCES})
 
 # Link libraries
-target_link_libraries(MapViewer ${Vulkan_LIBRARY} glfw ${CMAKE_DL_LIBS})
+target_link_libraries(MapViewer ${Vulkan_LIBRARY} glfw Threads::Threads ${CMAKE_DL_LIBS})

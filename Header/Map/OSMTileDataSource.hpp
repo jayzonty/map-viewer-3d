@@ -62,6 +62,15 @@ public:
      */
     bool Retrieve(const glm::ivec2 &tileIndex, const int &zoomLevel, TileData &outTileData) override;
 
+    /**
+     * @brief Prefetches the tile data at the specified tile index and zoom level, and
+     * caches the result locally.
+     * @param[in] tileIndex Tile index of the tile to prefetch
+     * @param[in] zoomLevel Zoom level
+     * @return True if the operation was successful
+     */
+    bool Prefetch(const glm::ivec2 &tileIndex, const int &zoomLevel);
+
 private:
     /**
      * @brief Retrieves tile data from the given xml document
@@ -70,6 +79,14 @@ private:
      * @return True if the operation was successful.
      */
     bool RetrieveFromXML(const tinyxml2::XMLDocument &xml, TileData &outTileData);
+
+    /**
+     * @brief Retrieves tile data from the server
+     * @param[in] tileIndex Tile index
+     * @param[in] zoomLevel Zoom level
+     * @return XML document representing the tile data. Returns nullptr if the tile data cannot be retrieved from the server
+     */
+    tinyxml2::XMLDocument* RetrieveFromServer(const glm::ivec2 &tileIndex, const int &zoomLevel);
 
     /**
      * @brief Retrieves building data from the given xml element

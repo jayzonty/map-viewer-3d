@@ -16,6 +16,7 @@
 #include "glm/geometric.hpp"
 
 #include <GLFW/glfw3.h>
+#include <functional>
 #include <glm/gtc/matrix_transform.hpp>
 #include <vulkan/vulkan_core.h>
 
@@ -23,6 +24,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <thread>
 
 const uint32_t SHADOW_MAP_WIDTH = 1024;
 const uint32_t SHADOW_MAP_HEIGHT = 1024;
@@ -33,6 +35,11 @@ const uint32_t SHADOW_MAP_HEIGHT = 1024;
 Application::Application()
     : m_isRunning(false)
     , m_camera()
+    , m_workerThreadRunning(true)
+    , m_retrieveTileJobs()
+    , m_retrieveTileJobsMutex()
+    , m_tilesUpdateMutex()
+    , m_tilesUpdated(false)
 {
 }
 
@@ -80,6 +87,9 @@ void Application::Run()
     m_camera.SetWorldUpVector(glm::vec3(0.0f, 1.0f, 0.0f));
 
     glm::vec3 dirLightDirection = glm::vec3(0.0f, -1.0f, 1.0f);
+
+    m_workerThreadRunning = true;
+    std::thread workerThread(std::bind(&Application::WorkerThreadFunc, this));
 
     uint32_t currentFrame = 0;
 
@@ -138,6 +148,32 @@ void Application::Run()
             playerWorldPosition -= originXY;
             playerWorldPosition *= SCALE;
             m_camera.SetPosition(glm::vec3(playerWorldPosition.x, m_camera.GetPosition().y, playerWorldPosition.y));
+        }
+
+        if (m_tilesUpdateMutex.try_lock())
+        {
+            if (m_tilesUpdated)
+            {
+                std::vector<Vertex> vertices;
+
+                const uint32_t MAX_VERTEX_COUNT = 1000000;
+                Vertex *data = reinterpret_cast<Vertex*>(m_testVertexBuffer.MapMemory(0, MAX_VERTEX_COUNT * sizeof(Vertex)));
+
+                m_numVertices = 0;
+                for (size_t i = 0; i < m_activeTiles.size(); ++i)
+                {
+                    vertices.clear();
+                    AppendTileGeometryVertices(m_activeTiles[i], m_origin, vertices);
+                    memcpy(data + m_numVertices, vertices.data(), sizeof(Vertex) * vertices.size());
+                    m_numVertices += vertices.size();
+                }
+
+                m_testVertexBuffer.UnmapMemory();
+
+                m_tilesUpdated = false;
+            }
+
+            m_tilesUpdateMutex.unlock();
         }
 
         // --- Draw frame start ---
@@ -370,6 +406,8 @@ void Application::Run()
     }
 
     vkDeviceWaitIdle(VulkanContext::GetLogicalDevice());
+
+    workerThread.join();
 
     Cleanup();
 }
@@ -1526,18 +1564,25 @@ void Application::UpdateCurrentTile(const glm::ivec2 &newCurrentTileIndex)
     for (size_t i = m_activeTiles.size(); i > 0; --i)
     {
         size_t idx = i - 1;
-        if (!RectI::IsPointInsideRect(newViewArea, m_activeTiles[idx].tileData.index))
+        if (!RectI::IsPointInsideRect(newViewArea, m_activeTiles[idx].index))
         {
             m_activeTiles.erase(m_activeTiles.begin() + idx);
         }
     }
 
+    {
+        std::lock_guard tileUpdateLock(m_tilesUpdateMutex);
+        m_tilesUpdated = true;
+    }
+
+    std::lock_guard lock(m_retrieveTileJobsMutex);
+    int prefetchDistance = 1;
     // Go through tiles in the new view area, and if they are also part
     // of the old view area, skip since its data should already be in the active tiles list
     OSMTileDataSource dataSource = {};
-    for (int dy = -viewDist; dy <= viewDist; ++dy)
+    for (int dy = -viewDist - prefetchDistance; dy <= viewDist + prefetchDistance; ++dy)
     {
-        for (int dx = -viewDist; dx <= viewDist; ++dx)
+        for (int dx = -viewDist - prefetchDistance; dx <= viewDist + prefetchDistance; ++dx)
         {
             glm::ivec2 index = newCurrentTileIndex;
             index.x += dx;
@@ -1548,26 +1593,64 @@ void Application::UpdateCurrentTile(const glm::ivec2 &newCurrentTileIndex)
                 continue;
             }
 
-            m_activeTiles.emplace_back();
-            if (!dataSource.Retrieve(index, zoomLevel, m_activeTiles.back().tileData))
-            {
-                m_activeTiles.pop_back();
-            }
+            RetrieveTileJob job = {};
+            job.tileIndex = index;
+            job.zoomLevel = zoomLevel;
+            job.addImmediately = RectI::IsPointInsideRect(newViewArea, index);
+            m_retrieveTileJobs.push(job);
         }
     }
+}
 
-    const uint32_t MAX_VERTEX_COUNT = 1000000;
-    Vertex *data = reinterpret_cast<Vertex*>(m_testVertexBuffer.MapMemory(0, MAX_VERTEX_COUNT * sizeof(Vertex)));
+/**
+ * @brief Function run by the worker thread where tiles are downloaded
+ * in the background.
+ */
+void Application::WorkerThreadFunc()
+{
+    OSMTileDataSource dataSource = {};
 
-    m_numVertices = 0;
-    for (size_t i = 0; i < m_activeTiles.size(); ++i)
+    while (m_workerThreadRunning)
     {
-        m_activeTiles[i].vertices.clear();
-        AppendTileGeometryVertices(m_activeTiles[i].tileData, m_origin, m_activeTiles[i].vertices);
-        memcpy(data + m_numVertices, m_activeTiles[i].vertices.data(), sizeof(Vertex) * m_activeTiles[i].vertices.size());
+        std::vector<TileData> tilesRetrieved;
 
-        m_numVertices += m_activeTiles[i].vertices.size();
+        bool hasNewJob = false;
+        RetrieveTileJob job;
+        if (m_retrieveTileJobsMutex.try_lock())
+        {
+            if (!m_retrieveTileJobs.empty())
+            {
+                job = m_retrieveTileJobs.front();
+                hasNewJob = true;
+                m_retrieveTileJobs.pop();
+            }
+            m_retrieveTileJobsMutex.unlock();
+        }
+        else
+        {
+            using namespace std::chrono_literals;
+            std::this_thread::sleep_for(1000ms);
+            continue;
+        }
+
+        if (hasNewJob)
+        {
+            if (job.addImmediately)
+            {
+                tilesRetrieved.emplace_back();
+                if (!dataSource.Retrieve(job.tileIndex, job.zoomLevel, tilesRetrieved.back()))
+                {
+                    tilesRetrieved.pop_back();
+                }
+            }
+            else
+            {
+                dataSource.Prefetch(job.tileIndex, job.zoomLevel);
+            }
+
+            std::lock_guard lock2(m_tilesUpdateMutex);
+            m_activeTiles.insert(m_activeTiles.end(), tilesRetrieved.begin(), tilesRetrieved.end());
+            m_tilesUpdated = true;
+        }
     }
-
-    m_testVertexBuffer.UnmapMemory();
 }
