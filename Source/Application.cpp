@@ -407,6 +407,7 @@ void Application::Run()
 
     vkDeviceWaitIdle(VulkanContext::GetLogicalDevice());
 
+    m_workerThreadRunning = false;
     workerThread.join();
 
     Cleanup();
