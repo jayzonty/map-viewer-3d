@@ -1537,6 +1537,53 @@ uint32_t Application::AppendTileGeometryVertices(const TileData &tileData, const
         }
     }
 
+    // Water vertices
+    glm::vec3 waterColor { 0.8314f, 0.9451f, 0.9765f };
+    const std::vector<WaterFeatureData> &waters = tileData.waterFeatures;
+    for (size_t i = 0; i < waters.size(); ++i)
+    {
+        const WaterFeatureData &water = waters[i];
+
+        pointsInTriangulation.clear();
+        
+        std::vector<glm::dvec2> points;
+        for (size_t j = 0; j < water.outline.size(); ++j)
+        {
+            points.push_back(GeometryUtils::LonLatToXY(water.outline[j]));
+        }
+
+        for (size_t j = 0; j < points.size(); j++)
+        {
+            glm::dvec2 &a = points[j];
+            glm::dvec2 &b = points[(j + 1) % points.size()];
+            glm::dvec2 &c = points[(j + 2) % points.size()];
+
+            if (GeometryUtils::IsCollinear(a, b, c))
+            {
+                points.erase(points.begin() + ((j + 1) % points.size()));
+                --j;
+            }
+        }
+
+        if (!GeometryUtils::IsPolygonCCW(points))
+        {
+            std::reverse(points.begin(), points.end());
+        }
+
+        GeometryUtils::PolygonTriangulation(points, pointsInTriangulation);
+
+        for (size_t j = 0; j < pointsInTriangulation.size(); j++)
+        {
+            glm::dvec2 point = (pointsInTriangulation[j] - tileCenter) * SCALE;
+            dest.emplace_back();
+            dest.back().position.x = point.x;
+            dest.back().position.y = 0.0f;
+            dest.back().position.z = point.y;
+            dest.back().color = waterColor;
+            dest.back().normal = { 0.0f, 1.0f, 0.0f };
+        }
+    }
+
     numVerticesAdded = static_cast<uint32_t>(dest.size()) - numVerticesAdded;
     return numVerticesAdded;
 }

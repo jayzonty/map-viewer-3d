@@ -3,6 +3,7 @@
 #include "Map/TileDataSource.hpp"
 #include "Util/GeometryUtils.hpp"
 
+#include <cstring>
 #include <fstream>
 #include <glm/glm.hpp>
 #include <glm/ext/scalar_constants.hpp>
@@ -148,6 +149,14 @@ bool OSMTileDataSource::RetrieveFromXML(const tinyxml2::XMLDocument &xml, TileDa
             if (!RetrieveHighwayData(wayElement, nodeIDToLonLat, outTileData.highways.back()))
             {
                 outTileData.highways.pop_back();
+            }
+        }
+        else if (HasWaterData(wayElement))
+        {
+            outTileData.waterFeatures.emplace_back();
+            if (!RetrieveWaterData(wayElement, nodeIDToLonLat, outTileData.waterFeatures.back()))
+            {
+                outTileData.waterFeatures.pop_back();
             }
         }
 
@@ -368,6 +377,36 @@ bool OSMTileDataSource::RetrieveHighwayData(const tinyxml2::XMLElement *element,
     return true;
 }
 
+/**
+ * @brief Retrieve water feature data from the given xml element
+ * @param[in] element XML element object
+ * @param[in] nodeIDToLonLat Map containing the mapping between a node ID and its lon/lat position
+ * @param[out] outWaterData WaterFeatureData object that will contain the retrieved water feature data
+ * @return True if the operation was successful.
+ */
+bool OSMTileDataSource::RetrieveWaterData(const tinyxml2::XMLElement *element, const std::map<int32_t, glm::dvec2> &nodeIDToLonLat, WaterFeatureData &outWaterData)
+{
+    const tinyxml2::XMLElement *nodeRefElement = element->FirstChildElement(WAY_NODE_ELEMENT_STR);
+    while (nodeRefElement != nullptr)
+    {
+        int32_t nodeId = nodeRefElement->IntAttribute(WAY_NODE_REF_ATTRIBUTE_STR);
+        if (nodeIDToLonLat.find(nodeId) != nodeIDToLonLat.end())
+        {
+            double lon = nodeIDToLonLat.at(nodeId).x;
+            double lat = nodeIDToLonLat.at(nodeId).y;
+            outWaterData.outline.emplace_back(lon, lat);
+        }
+        nodeRefElement = nodeRefElement->NextSiblingElement(WAY_NODE_ELEMENT_STR);
+    }
+
+    if (outWaterData.outline.size() == 0)
+    {
+        return false;
+    }
+
+    return true;
+}
+
 bool OSMTileDataSource::HasChildTag(const tinyxml2::XMLElement *parent, const char *key)
 {
     const tinyxml2::XMLElement *curr = parent->FirstChildElement(TAG_ELEMENT_STR);
@@ -404,4 +443,25 @@ const tinyxml2::XMLAttribute* OSMTileDataSource::GetChildTagValue(const tinyxml2
     }
 
     return nullptr;
+}
+
+/**
+ * @brief Checks whether the given xml element contains data for a water feature
+ * @param[in] element XML element
+ * @return True if the given XML element contains data for a water feature 
+ */
+bool OSMTileDataSource::HasWaterData(const tinyxml2::XMLElement *element)
+{
+    if (HasChildTag(element, WATER_KEY_STR))
+    {
+        return true;
+    }
+
+    const tinyxml2::XMLAttribute *naturalAttrib = GetChildTagValue(element, NATURAL_KEY_STR);
+    if (naturalAttrib != nullptr)
+    {
+        return strcmp(naturalAttrib->Value(), NATURAL_WATER_VALUE_STR) == 0;
+    }
+
+    return false;
 }

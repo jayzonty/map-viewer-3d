@@ -38,6 +38,11 @@ private:
     const char *HIGHWAY_TAG_KEY_STR = "highway";
     const char *HIGHWAY_LANES_TAG_KEY_STR = "lanes";
 
+    const char *NATURAL_KEY_STR = "natural";
+    const char *NATURAL_WATER_VALUE_STR = "water";
+    const char *WATER_KEY_STR = "water";
+    const char *WATERWAY_KEY_STR = "waterway";
+
     const double METERS_PER_LEVEL = 3.0;
     const double PRIMARY_HIGHWAY_LANE_WIDTH_METERS = 2.0; 
     const double RESIDENTIAL_HIGHWAY_LANE_WIDTH_METERS = 1.0; 
@@ -106,8 +111,24 @@ private:
      */
     bool RetrieveHighwayData(const tinyxml2::XMLElement *element, const std::map<int32_t, glm::dvec2> &nodeIDToLonLat, HighwayData &outHighwayData);
 
+    /**
+     * @brief Retrieve water feature data from the given xml element
+     * @param[in] element XML element object
+     * @param[in] nodeIDToLonLat Map containing the mapping between a node ID and its lon/lat position
+     * @param[out] outWaterData WaterFeatureData object that will contain the retrieved water feature data
+     * @return True if the operation was successful.
+     */
+    bool RetrieveWaterData(const tinyxml2::XMLElement *element, const std::map<int32_t, glm::dvec2> &nodeIDToLonLat, WaterFeatureData &outWaterData);
+
     bool HasChildTag(const tinyxml2::XMLElement *parent, const char *key);
     const tinyxml2::XMLAttribute* GetChildTagValue(const tinyxml2::XMLElement *parent, const char *key);
+
+    /**
+     * @brief Checks whether the given xml element contains data for a water feature
+     * @param[in] element XML element
+     * @return True if the given XML element contains data for a water feature 
+     */
+    bool HasWaterData(const tinyxml2::XMLElement *element);
 };
 
 #endif // OSM_TILE_DATA_SOURCE_HEADER

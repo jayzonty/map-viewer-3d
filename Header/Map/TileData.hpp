@@ -7,6 +7,12 @@
 
 #include <glm/fwd.hpp>
 
+// Struct containing data about a water feature
+struct WaterFeatureData
+{
+    std::vector<glm::dvec2> outline;        // Outline of the water feature geometry
+};
+
 /**
  * Struct containing data about a tile
  */
@@ -17,6 +23,7 @@ struct TileData
 
     std::vector<BuildingData> buildings;    // List of building data
     std::vector<HighwayData> highways;      // List of highway data
+    std::vector<WaterFeatureData> waterFeatures;    // List of water features
 };
 
 #endif // TILE_DATA_HEADER
