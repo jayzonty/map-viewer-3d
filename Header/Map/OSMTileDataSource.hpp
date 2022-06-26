@@ -68,6 +68,14 @@ public:
     bool Retrieve(const glm::ivec2 &tileIndex, const int &zoomLevel, TileData &outTileData) override;
 
     /**
+     * @brief Queries whether there is a tile cache available for the specified tile index and zoom level
+     * @param[in] tileIndex Tile index
+     * @param[in] zoomLevel Zoom level
+     * @return True if there is a tile cache available
+     */
+    bool IsTileCacheAvailable(const glm::ivec2 &tileIndex, const int &zoomLevel) override;
+
+    /**
      * @brief Prefetches the tile data at the specified tile index and zoom level, and
      * caches the result locally.
      * @param[in] tileIndex Tile index of the tile to prefetch
@@ -77,6 +85,14 @@ public:
     bool Prefetch(const glm::ivec2 &tileIndex, const int &zoomLevel);
 
 private:
+    /**
+     * @brief Gets the tile cache file path for the specified tile index and zoom level
+     * @param[in] tileIndex Tile index
+     * @param[in] zoomLevel Zoom level
+     * @return File path for the specified tile index and zoom level
+     */
+    std::string GetTileFilePath(const glm::ivec2 &tileIndex, const int &zoomLevel);
+
     /**
      * @brief Retrieves tile data from the given xml document
      * @param[in] xml XML document object

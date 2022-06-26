@@ -33,6 +33,14 @@ public:
      * @return True if the operation was successful.
      */
     virtual bool Retrieve(const glm::ivec2 &tileIndex, const int &zoomLevel, TileData &outTileData) = 0;
+
+    /**
+     * @brief Queries whether there is a tile cache available for the specified tile index and zoom level
+     * @param[in] tileIndex Tile index
+     * @param[in] zoomLevel Zoom level
+     * @return True if there is a tile cache available
+     */
+    virtual bool IsTileCacheAvailable(const glm::ivec2 &tileIndex, const int &zoomLevel) = 0;
 };
 
 #endif // TILE_DATA_SOURCE_HEADER

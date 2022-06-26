@@ -47,9 +47,7 @@ OSMTileDataSource::~OSMTileDataSource()
  */
 bool OSMTileDataSource::Retrieve(const glm::ivec2 &tileIndex, const int &zoomLevel, TileData &outTileData)
 {
-    std::stringstream ss;
-    ss << "Resources/map_" << zoomLevel << "-" << tileIndex.x << "-" << tileIndex.y << ".osm";
-    std::string fileName = ss.str();
+    std::string fileName = GetTileFilePath(tileIndex, zoomLevel);
 
     tinyxml2::XMLDocument document;
     if (document.LoadFile(fileName.c_str()) == tinyxml2::XML_SUCCESS)
@@ -70,6 +68,19 @@ bool OSMTileDataSource::Retrieve(const glm::ivec2 &tileIndex, const int &zoomLev
 }
 
 /**
+ * @brief Queries whether there is a tile cache available for the specified tile index and zoom level
+ * @param[in] tileIndex Tile index
+ * @param[in] zoomLevel Zoom level
+ * @return True if there is a tile cache available
+ */
+bool OSMTileDataSource::IsTileCacheAvailable(const glm::ivec2 &tileIndex, const int &zoomLevel)
+{
+    std::string fileName = GetTileFilePath(tileIndex, zoomLevel);
+    std::ifstream file(fileName);
+    return file.good();
+}
+
+/**
  * @brief Prefetches the tile data at the specified tile index and zoom level, and
  * caches the result locally.
  * @param[in] tileIndex Tile index of the tile to prefetch
@@ -78,9 +89,7 @@ bool OSMTileDataSource::Retrieve(const glm::ivec2 &tileIndex, const int &zoomLev
  */
 bool OSMTileDataSource::Prefetch(const glm::ivec2 &tileIndex, const int &zoomLevel)
 {
-    std::stringstream ss;
-    ss << "Resources/map_" << zoomLevel << "-" << tileIndex.x << "-" << tileIndex.y << ".osm";
-    std::string fileName = ss.str();
+    std::string fileName = GetTileFilePath(tileIndex, zoomLevel);
 
     std::ifstream file(fileName);
     if (!file.fail())
@@ -98,6 +107,19 @@ bool OSMTileDataSource::Prefetch(const glm::ivec2 &tileIndex, const int &zoomLev
     delete doc;
 
     return true;
+}
+
+/**
+ * @brief Gets the tile cache file path for the specified tile index and zoom level
+ * @param[in] tileIndex Tile index
+ * @param[in] zoomLevel Zoom level
+ * @return File path for the specified tile index and zoom level
+ */
+std::string OSMTileDataSource::GetTileFilePath(const glm::ivec2 &tileIndex, const int &zoomLevel)
+{
+    std::stringstream ss;
+    ss << "Resources/map_" << zoomLevel << "-" << tileIndex.x << "-" << tileIndex.y << ".osm";
+    return ss.str();
 }
 
 /**
