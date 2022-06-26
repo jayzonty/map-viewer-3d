@@ -122,7 +122,7 @@ private:
 
     bool m_workerThreadRunning;             // Flag indicating whether the worker thread is running
 
-    std::queue<RetrieveTileJob> m_retrieveTileJobs;     // List of retrieve tile jobs
+    std::vector<RetrieveTileJob> m_retrieveTileJobs;    // List of retrieve tile jobs
     std::mutex m_retrieveTileJobsMutex;                 // Mutex for the retrieve tile jobs list
 
     std::mutex m_tilesUpdateMutex;                      // Mutex for a tile update routine
@@ -236,8 +236,9 @@ private:
     /**
      * @brief Function run by the worker thread where tiles are downloaded
      * in the background.
+     * @param[in] downloadIfNeeded Flag indicating whether the thread is to download data if needed
      */
-    void WorkerThreadFunc();
+    void WorkerThreadFunc(bool downloadIfNeeded);
 };
 
 #endif // APPLICATION_HEADER

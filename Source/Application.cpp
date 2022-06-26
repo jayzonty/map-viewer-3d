@@ -89,7 +89,8 @@ void Application::Run()
     glm::vec3 dirLightDirection = glm::vec3(0.0f, -1.0f, 1.0f);
 
     m_workerThreadRunning = true;
-    std::thread workerThread(std::bind(&Application::WorkerThreadFunc, this));
+    std::thread workerThread1(std::bind(&Application::WorkerThreadFunc, this, true)); // Worker thread that downloads data if needed
+    std::thread workerThread2(std::bind(&Application::WorkerThreadFunc, this, false)); // Worker thread that only focuses on cached tiles
 
     uint32_t currentFrame = 0;
 
@@ -408,7 +409,8 @@ void Application::Run()
     vkDeviceWaitIdle(VulkanContext::GetLogicalDevice());
 
     m_workerThreadRunning = false;
-    workerThread.join();
+    workerThread1.join();
+    workerThread2.join();
 
     Cleanup();
 }
@@ -1641,11 +1643,10 @@ void Application::UpdateCurrentTile(const glm::ivec2 &newCurrentTileIndex)
                 continue;
             }
 
-            RetrieveTileJob job = {};
-            job.tileIndex = index;
-            job.zoomLevel = zoomLevel;
-            job.addImmediately = RectI::IsPointInsideRect(newViewArea, index);
-            m_retrieveTileJobs.push(job);
+            m_retrieveTileJobs.emplace_back();
+            m_retrieveTileJobs.back().tileIndex = index;
+            m_retrieveTileJobs.back().zoomLevel = zoomLevel;
+            m_retrieveTileJobs.back().addImmediately = RectI::IsPointInsideRect(newViewArea, index);
         }
     }
 }
@@ -1653,25 +1654,38 @@ void Application::UpdateCurrentTile(const glm::ivec2 &newCurrentTileIndex)
 /**
  * @brief Function run by the worker thread where tiles are downloaded
  * in the background.
+ * @param[in] downloadIfNeeded Flag indicating whether the thread is to download data if needed
  */
-void Application::WorkerThreadFunc()
+void Application::WorkerThreadFunc(bool downloadIfNeeded)
 {
     OSMTileDataSource dataSource = {};
 
     while (m_workerThreadRunning)
     {
-        std::vector<TileData> tilesRetrieved;
-
-        bool hasNewJob = false;
-        RetrieveTileJob job;
+        std::vector<RetrieveTileJob> jobs;
         if (m_retrieveTileJobsMutex.try_lock())
         {
-            if (!m_retrieveTileJobs.empty())
+            // Try to prioritize tiles that already have cached data
+            for (size_t i = m_retrieveTileJobs.size(); i > 0; --i)
             {
-                job = m_retrieveTileJobs.front();
-                hasNewJob = true;
-                m_retrieveTileJobs.pop();
+                size_t index = i - 1;
+                RetrieveTileJob &job = m_retrieveTileJobs[index];
+                if (dataSource.IsTileCacheAvailable(job.tileIndex, job.zoomLevel))
+                {
+                    jobs.push_back(job);
+                    m_retrieveTileJobs.erase(m_retrieveTileJobs.begin() + index);
+                }
             }
+
+            if (downloadIfNeeded)
+            {
+                if (!m_retrieveTileJobs.empty())
+                {
+                    jobs.push_back(m_retrieveTileJobs.front());
+                    m_retrieveTileJobs.erase(m_retrieveTileJobs.begin());
+                }
+            }
+
             m_retrieveTileJobsMutex.unlock();
         }
         else
@@ -1681,8 +1695,10 @@ void Application::WorkerThreadFunc()
             continue;
         }
 
-        if (hasNewJob)
+        std::vector<TileData> tilesRetrieved;
+        for (size_t i = 0; i < jobs.size(); ++i)
         {
+            RetrieveTileJob &job = jobs[i];
             if (job.addImmediately)
             {
                 tilesRetrieved.emplace_back();
@@ -1695,7 +1711,10 @@ void Application::WorkerThreadFunc()
             {
                 dataSource.Prefetch(job.tileIndex, job.zoomLevel);
             }
+        }
 
+        if (!tilesRetrieved.empty())
+        {
             std::lock_guard lock2(m_tilesUpdateMutex);
             m_activeTiles.insert(m_activeTiles.end(), tilesRetrieved.begin(), tilesRetrieved.end());
             m_tilesUpdated = true;
